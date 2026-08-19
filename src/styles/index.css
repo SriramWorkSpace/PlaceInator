@@ -31,6 +31,9 @@
      CSS ease-out is too weak; this is the standard replacement. Reuse this
      token for future motion rather than inlining a new cubic-bezier. */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  /* For motion that moves/morphs something already on screen (the sidebar
+     rail's width, a label reveal) rather than entering or exiting it. */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 :root {
@@ -308,4 +311,62 @@ textarea,
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* ------------------------------------------------------------------ *
+ * Sidebar collapse/expand.
+ *
+ * Purpose: preventing a jarring change -- the rail's width and each
+ * label's reveal must read as one coordinated motion, not two racing
+ * each other. The bug this fixes: labels were conditionally mounted on
+ * the same boolean driving the rail's width, so they popped in at full
+ * size while the rail was still mid-transition and visibly reflowed.
+ * Labels now stay mounted and animate via max-width + opacity in sync
+ * with the rail instead.
+ *
+ * width is tolerated here the same way it's tolerated for accordions --
+ * there is no transform equivalent for "the rail reserves zero space for
+ * this label" vs. "reserves its full width".
+ * ------------------------------------------------------------------ */
+
+.sidebar-rail {
+  transition: width 200ms var(--ease-in-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-rail {
+    transition-duration: 1ms;
+  }
+}
+
+.sidebar-label {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: top;
+  opacity: 1;
+  transition:
+    max-width 200ms var(--ease-in-out),
+    opacity 150ms var(--ease-out);
+}
+.sidebar-label[data-collapsed="true"] {
+  max-width: 0;
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-label {
+    transition: opacity 150ms ease;
+  }
+  .sidebar-label[data-collapsed="true"] {
+    max-width: 0;
+  }
+}
+
+.sidebar-row {
+  transition: padding 200ms var(--ease-in-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-row {
+    transition-duration: 1ms;
+  }
 }

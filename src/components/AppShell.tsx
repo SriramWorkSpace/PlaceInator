@@ -45,7 +45,7 @@ function Sidebar({
 }) {
   return (
     <nav
-      className={`flex shrink-0 flex-col border-r p-3 transition-[width] ${collapsed ? "w-16" : "w-60"}`}
+      className={`sidebar-rail flex shrink-0 flex-col border-r p-3 ${collapsed ? "w-16" : "w-60"}`}
       style={{ borderColor: "var(--border)", background: "var(--canvas)" }}
     >
       <Logo collapsed={collapsed} />
@@ -90,19 +90,17 @@ function Logo({ collapsed }: { collapsed: boolean }) {
         style={{ background: "var(--accent)" }}
         aria-hidden="true"
       />
-      {!collapsed && (
-        <span className="min-w-0">
-          <span
-            className="block font-serif text-base font-semibold tracking-tight"
-            style={{ color: "var(--fg)" }}
-          >
-            PlaceInator
-          </span>
-          <span className="eyebrow block" style={{ color: "var(--fg-subtle)" }}>
-            Placement Companion
-          </span>
+      <span className="sidebar-label" data-collapsed={collapsed}>
+        <span
+          className="block font-serif text-base font-semibold tracking-tight"
+          style={{ color: "var(--fg)" }}
+        >
+          PlaceInator
         </span>
-      )}
+        <span className="eyebrow block" style={{ color: "var(--fg-subtle)" }}>
+          Placement Companion
+        </span>
+      </span>
     </div>
   );
 }
@@ -116,7 +114,7 @@ function Logo({ collapsed }: { collapsed: boolean }) {
  * past the sidebar's edge in collapsed mode. */
 function navRowClassName(collapsed: boolean): string {
   const padding = collapsed ? "justify-center px-1" : "px-2.5";
-  return `flex items-center gap-2.5 rounded-2xl py-2 text-sm transition-colors ${padding}`;
+  return `sidebar-row flex items-center gap-2.5 rounded-2xl py-2 text-sm transition-colors ${padding}`;
 }
 
 function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
@@ -142,7 +140,9 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
         >
           <Icon width={16} height={16} style={{ color: `var(${item.color})` }} />
         </span>
-        {!collapsed && <span>{item.label}</span>}
+        <span className="sidebar-label" data-collapsed={collapsed}>
+          {item.label}
+        </span>
       </NavLink>
     </li>
   );
@@ -175,7 +175,9 @@ function ProfileLink({ collapsed }: { collapsed: boolean }) {
         >
           <PersonIcon width={16} height={16} />
         </span>
-        {!collapsed && <span className="truncate">{label}</span>}
+        <span className="sidebar-label truncate" data-collapsed={collapsed}>
+          {label}
+        </span>
       </NavLink>
     </li>
   );
