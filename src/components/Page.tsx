@@ -1,6 +1,18 @@
 import type { ReactNode } from "react";
+import { useLocation } from "react-router-dom";
 
-/** Standard page frame: title, optional description, then content. */
+import { navItemForPath } from "@/lib/nav";
+
+/**
+ * Standard page frame: a colored eyebrow naming the section, a serif display
+ * title, an optional description, then content -- the recurring
+ * "SECTION / Heading" pattern this design follows (see
+ * docs/decisions/0006-studio-visual-language.md).
+ *
+ * The eyebrow label and its color are derived from the current route via
+ * navItemForPath, so every page gets a consistent one automatically instead
+ * of each route file passing them in by hand.
+ */
 export function Page({
   title,
   description,
@@ -10,15 +22,23 @@ export function Page({
   description?: string;
   children?: ReactNode;
 }) {
+  const { pathname } = useLocation();
+  const navItem = navItemForPath(pathname);
+
   return (
-    <div className="mx-auto max-w-5xl p-8">
-      <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+    <div className="mx-auto max-w-5xl p-10">
+      {navItem && (
+        <p className="eyebrow" style={{ color: `var(${navItem.color})` }}>
+          {navItem.label}
+        </p>
+      )}
+      <h1 className="display-heading mt-1 text-4xl">{title}</h1>
       {description && (
-        <p className="mt-1 text-sm" style={{ color: "var(--fg-muted)" }}>
+        <p className="mt-2 max-w-2xl text-sm" style={{ color: "var(--fg-muted)" }}>
           {description}
         </p>
       )}
-      <div className="mt-6">{children}</div>
+      <div className="mt-8">{children}</div>
     </div>
   );
 }
@@ -41,8 +61,8 @@ export function EmptyState({
 }) {
   return (
     <div
-      className="flex flex-col items-center justify-center rounded-md border border-dashed px-6 py-16 text-center"
-      style={{ borderColor: "var(--border)" }}
+      className="flex flex-col items-center justify-center rounded-[var(--radius-panel)] border border-dashed px-6 py-16 text-center"
+      style={{ borderColor: "var(--border-strong)", background: "var(--canvas-subtle)" }}
     >
       <p className="text-sm font-medium">{title}</p>
       {hint && (
@@ -52,5 +72,49 @@ export function EmptyState({
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>
+  );
+}
+
+/**
+ * A card with the same "SECTION / Heading" anatomy as Page itself, scaled
+ * down for content within a page (the reference's "Weekly Thread" / "Current
+ * Care" panels).
+ */
+export function SectionCard({
+  eyebrow,
+  eyebrowColor = "var(--accent)",
+  title,
+  description,
+  action,
+  children,
+}: {
+  eyebrow: string;
+  eyebrowColor?: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <section
+      className="rounded-[var(--radius-panel)] border p-6"
+      style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="eyebrow" style={{ color: eyebrowColor }}>
+            {eyebrow}
+          </p>
+          <h2 className="display-heading mt-1 text-2xl">{title}</h2>
+          {description && (
+            <p className="mt-1.5 max-w-lg text-sm" style={{ color: "var(--fg-muted)" }}>
+              {description}
+            </p>
+          )}
+        </div>
+        {action}
+      </div>
+      {children && <div className="mt-5">{children}</div>}
+    </section>
   );
 }

@@ -1,19 +1,31 @@
 @import "tailwindcss";
+@import "@fontsource-variable/fraunces/soft.css";
+@import "@fontsource-variable/inter/wght.css";
 
 /* ------------------------------------------------------------------ *
  * Design tokens.
  *
- * GitHub-adjacent, not GitHub: neutral greys carry the whole interface,
- * one accent colour marks interactive and selected state, borders are a
- * flat 1px, and there are no gradients or shadows above level 1.
+ * Warm, editorial "studio" language: cream canvas, a serif display face
+ * for headings, fully-rounded controls, and a distinct muted accent color
+ * per section (nav badges, eyebrow labels). Self-hosted variable fonts
+ * (@fontsource-variable) keep this fully local -- no runtime dependency on
+ * a font CDN, consistent with the rest of the app running offline-first.
+ *
+ * This supersedes the flat, single-accent "GitHub-adjacent" direction
+ * specification.md originally called for -- see
+ * docs/decisions/0006-studio-visual-language.md for why, since
+ * specification.md itself is the user's verbatim source of truth and is
+ * never edited to match implementation.
  * ------------------------------------------------------------------ */
 
 @theme {
-  /* 8px spacing scale is Tailwind's default; typography is the deviation. */
-  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-serif: "Fraunces Variable", ui-serif, Georgia, serif;
   --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 
-  --radius-panel: 6px;
+  --radius-panel: 20px;
+  --radius-input: 14px;
+  --radius-pill: 999px;
 
   /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
      CSS ease-out is too weak; this is the standard replacement. Reuse this
@@ -24,72 +36,99 @@
 :root {
   color-scheme: light;
 
-  --canvas: #ffffff;
-  --canvas-subtle: #f6f7f9;
-  --canvas-inset: #eef0f3;
+  --canvas: #f2f0e8;
+  --canvas-subtle: #faf9f4;
+  --canvas-inset: #ece8da;
 
-  --border: #d8dce1;
-  --border-strong: #b9c0c8;
+  --border: #e3ddc9;
+  --border-strong: #d1c8ac;
 
-  --fg: #1c2024;
-  --fg-muted: #5b6570;
-  --fg-subtle: #848f9b;
+  --fg: #211f1a;
+  --fg-muted: #6b6656;
+  --fg-subtle: #948d78;
 
-  --accent: #2f6feb;
+  --accent: #5d4a9e;
   --accent-fg: #ffffff;
-  --accent-subtle: #ddeafe;
+  --accent-subtle: #eae5f7;
 
-  --success: #1a7f4b;
-  --warning: #9a6700;
-  --danger: #c03434;
+  --success: #3f7d5c;
+  --warning: #a9762e;
+  --danger: #a1483a;
+
+  /* One muted, distinct hue per section -- the nav badges and each page's
+     eyebrow label. Chosen for even hue spread at similar saturation/
+     lightness so no section visually dominates the sidebar. */
+  --section-dashboard: #5b6b78;
+  --section-jobs: #a9822f;
+  --section-resumes: #3f8f74;
+  --section-tailor: #4a6fa0;
+  --section-career: #7c5a96;
+  --section-outreach: #b3577a;
+  --section-placement: #c17a3d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --canvas: #0f1216;
-    --canvas-subtle: #161b22;
-    --canvas-inset: #0b0e12;
+    --canvas: #1b1815;
+    --canvas-subtle: #232019;
+    --canvas-inset: #15130f;
 
-    --border: #2a313a;
-    --border-strong: #3d4650;
+    --border: #34301f;
+    --border-strong: #4a4433;
 
-    --fg: #e6e9ed;
-    --fg-muted: #9aa4b0;
-    --fg-subtle: #6e7883;
+    --fg: #efe9da;
+    --fg-muted: #b3aa93;
+    --fg-subtle: #837a61;
 
-    --accent: #5b8ef5;
-    --accent-fg: #0f1216;
-    --accent-subtle: #16233d;
+    --accent: #b3a3e8;
+    --accent-fg: #1b1815;
+    --accent-subtle: #2c2447;
 
-    --success: #46a86e;
-    --warning: #c69026;
-    --danger: #e06060;
+    --success: #6fbd94;
+    --warning: #d3a15c;
+    --danger: #d98a7a;
+
+    --section-dashboard: #8a9aa8;
+    --section-jobs: #d1a852;
+    --section-resumes: #6bbfa0;
+    --section-tailor: #7b9dc9;
+    --section-career: #a688c2;
+    --section-outreach: #d885a8;
+    --section-placement: #e0a066;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --canvas: #0f1216;
-  --canvas-subtle: #161b22;
-  --canvas-inset: #0b0e12;
+  --canvas: #1b1815;
+  --canvas-subtle: #232019;
+  --canvas-inset: #15130f;
 
-  --border: #2a313a;
-  --border-strong: #3d4650;
+  --border: #34301f;
+  --border-strong: #4a4433;
 
-  --fg: #e6e9ed;
-  --fg-muted: #9aa4b0;
-  --fg-subtle: #6e7883;
+  --fg: #efe9da;
+  --fg-muted: #b3aa93;
+  --fg-subtle: #837a61;
 
-  --accent: #5b8ef5;
-  --accent-fg: #0f1216;
-  --accent-subtle: #16233d;
+  --accent: #b3a3e8;
+  --accent-fg: #1b1815;
+  --accent-subtle: #2c2447;
 
-  --success: #46a86e;
-  --warning: #c69026;
-  --danger: #e06060;
+  --success: #6fbd94;
+  --warning: #d3a15c;
+  --danger: #d98a7a;
+
+  --section-dashboard: #8a9aa8;
+  --section-jobs: #d1a852;
+  --section-resumes: #6bbfa0;
+  --section-tailor: #7b9dc9;
+  --section-career: #a688c2;
+  --section-outreach: #d885a8;
+  --section-placement: #e0a066;
 }
 
 html,
@@ -133,6 +172,26 @@ textarea,
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * Studio eyebrow + display heading -- the recurring "SECTION / Heading"
+ * pattern from the reference (Page titles and card headers alike).
+ * ------------------------------------------------------------------ */
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.display-heading {
+  font-family: var(--font-serif);
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+  color: var(--fg);
 }
 
 /* ------------------------------------------------------------------ *
@@ -190,4 +249,63 @@ textarea,
   .theme-icon[data-hidden="true"] {
     transform: none;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Pill buttons and inputs -- "Tactile, legible, consistent": a 48px
+ * comfort target, a visible keyboard focus ring, and press feedback that
+ * respects prefers-reduced-motion.
+ * ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition:
+    transform 100ms var(--ease-out),
+    opacity 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    opacity: 0.9;
+  }
+}
+.btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition:
+      opacity 150ms ease,
+      background-color 150ms ease;
+  }
+  .btn:active {
+    transform: none;
+  }
+}
+
+.field-control {
+  border-radius: var(--radius-input);
+  transition: box-shadow 150ms var(--ease-out), border-color 150ms var(--ease-out);
+}
+.field-control:focus-visible,
+.field-control:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
 }

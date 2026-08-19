@@ -1,8 +1,8 @@
-import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
+import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
 import { CloseIcon } from "@/components/icons";
 
-/** A labeled form field, matching the flat/bordered GitHub-adjacent tokens. */
+/** A labeled form field. */
 export function Field({
   label,
   hint,
@@ -15,9 +15,9 @@ export function Field({
   return (
     <label className="block">
       <span className="text-sm font-medium">{label}</span>
-      <div className="mt-1">{children}</div>
+      <div className="mt-1.5">{children}</div>
       {hint && (
-        <span className="mt-1 block text-xs" style={{ color: "var(--fg-subtle)" }}>
+        <span className="mt-1.5 block text-xs" style={{ color: "var(--fg-subtle)" }}>
           {hint}
         </span>
       )}
@@ -25,7 +25,7 @@ export function Field({
   );
 }
 
-const inputStyle = {
+const controlStyle = {
   borderColor: "var(--border)",
   background: "var(--canvas)",
   color: "var(--fg)",
@@ -35,8 +35,8 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`w-full rounded border px-2.5 py-1.5 text-sm outline-none focus:border-[var(--accent)] ${props.className ?? ""}`}
-      style={inputStyle}
+      className={`field-control w-full border px-3.5 py-2.5 text-sm outline-none ${props.className ?? ""}`}
+      style={controlStyle}
     />
   );
 }
@@ -45,40 +45,41 @@ export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       {...props}
-      className={`w-full rounded border px-2.5 py-1.5 font-mono text-sm outline-none focus:border-[var(--accent)] ${props.className ?? ""}`}
-      style={inputStyle}
+      className={`field-control w-full border px-3.5 py-2.5 font-mono text-sm outline-none ${props.className ?? ""}`}
+      style={controlStyle}
     />
   );
 }
 
-export function Select(
-  props: React.SelectHTMLAttributes<HTMLSelectElement>,
-) {
+export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`w-full rounded border px-2.5 py-1.5 text-sm outline-none focus:border-[var(--accent)] ${props.className ?? ""}`}
-      style={inputStyle}
+      className={`field-control w-full border px-3.5 py-2.5 text-sm outline-none ${props.className ?? ""}`}
+      style={controlStyle}
     />
   );
 }
 
+/**
+ * Pill buttons at a 48px comfort target, in the three states the reference
+ * shows: solid primary, outlined secondary, and a soft tinted variant for a
+ * clearly-present-but-unavailable action (not just a dimmed primary).
+ */
 export function Button({
   variant = "primary",
   className = "",
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" }) {
-  const style =
-    variant === "primary"
-      ? { background: "var(--accent)", color: "var(--accent-fg)", borderColor: "var(--accent)" }
-      : { background: "var(--canvas)", color: "var(--fg)", borderColor: "var(--border)" };
-  return (
-    <button
-      {...props}
-      className={`rounded border px-3 py-1.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
-      style={style}
-    />
-  );
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "primary" | "secondary" | "soft";
+}) {
+  const style = {
+    primary: { background: "var(--accent)", color: "var(--accent-fg)", borderColor: "var(--accent)" },
+    secondary: { background: "var(--canvas)", color: "var(--fg)", borderColor: "var(--border-strong)" },
+    soft: { background: "var(--accent-subtle)", color: "var(--accent)", borderColor: "transparent" },
+  }[variant];
+
+  return <button {...props} className={`btn ${className}`} style={style} />;
 }
 
 export function ErrorText({

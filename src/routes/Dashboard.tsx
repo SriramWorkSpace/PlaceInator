@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { CheckCircleIcon } from "@/components/icons";
-import { EmptyState, Page } from "@/components/Page";
+import { EmptyState, Page, SectionCard } from "@/components/Page";
 import { getStatus, SidecarUnavailableError } from "@/lib/api";
 
 export function Dashboard() {
   return (
-    <Page title="Dashboard" description="Your placement activity at a glance.">
+    <Page
+      title="Studio Overview"
+      description="Your placement activity at a glance -- profile, resumes, jobs, and the local engine that ties them together."
+    >
       <SidecarStatus />
       <div className="mt-6">
         <EmptyState
@@ -20,8 +22,9 @@ export function Dashboard() {
 
 /**
  * Proves the UI to sidecar path end to end. Kept visible on the dashboard
- * because a silently disconnected sidecar would otherwise look like an app with
- * no data, which is the single most confusing failure this architecture allows.
+ * because a silently disconnected sidecar would otherwise look like an app
+ * with no data, which is the single most confusing failure this architecture
+ * allows.
  */
 function SidecarStatus() {
   const { data, error, isPending } = useQuery({
@@ -29,50 +32,61 @@ function SidecarStatus() {
     queryFn: getStatus,
   });
 
-  const state = isPending ? "connecting…" : error ? "unavailable" : "connected";
-  const tone = isPending
-    ? "var(--fg-muted)"
-    : error
-      ? "var(--danger)"
-      : "var(--success)";
-
   return (
-    <section
-      className="rounded-md border p-4"
-      style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+    <SectionCard
+      eyebrow="Observe"
+      eyebrowColor="var(--section-dashboard)"
+      title="Local engine"
+      description="Runs entirely on this machine."
     >
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-medium">Local engine</h2>
-        <span className="flex items-center gap-1 font-mono text-xs" style={{ color: tone }}>
-          {!isPending && !error && <CheckCircleIcon width={14} height={14} />}
-          {state}
-        </span>
-      </div>
-
-      {data && (
-        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono text-xs">
-          <Row label="version">{data.version}</Row>
-          <Row label="database">{data.database_ok ? "ok" : "degraded"}</Row>
-          <Row label="tables">{String(data.table_count)}</Row>
-        </dl>
+      {isPending ? (
+        <StatusRow tone="var(--fg-muted)" label="Connecting" description="Waiting for the sidecar to respond." />
+      ) : error ? (
+        <StatusRow
+          tone="var(--danger)"
+          label="Unavailable"
+          description={
+            error instanceof SidecarUnavailableError
+              ? error.message
+              : `Request failed — ${(error as Error).message}`
+          }
+        />
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatusRow tone="var(--success)" label="Connected" description={`v${data.version}`} />
+          <StatusRow
+            tone={data.database_ok ? "var(--success)" : "var(--warning)"}
+            label={data.database_ok ? "Database ok" : "Database degraded"}
+            description={`${data.table_count} tables`}
+          />
+        </div>
       )}
-
-      {error && (
-        <p className="selectable mt-3 text-xs" style={{ color: "var(--danger)" }}>
-          {error instanceof SidecarUnavailableError
-            ? error.message
-            : `Request failed — ${(error as Error).message}`}
-        </p>
-      )}
-    </section>
+    </SectionCard>
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function StatusRow({
+  tone,
+  label,
+  description,
+}: {
+  tone: string;
+  label: string;
+  description: string;
+}) {
   return (
-    <>
-      <dt style={{ color: "var(--fg-subtle)" }}>{label}</dt>
-      <dd className="selectable">{children}</dd>
-    </>
+    <div className="flex items-start gap-2.5">
+      <span
+        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+        style={{ background: tone }}
+        aria-hidden="true"
+      />
+      <div>
+        <p className="text-sm font-semibold">{label}</p>
+        <p className="selectable text-xs" style={{ color: "var(--fg-muted)" }}>
+          {description}
+        </p>
+      </div>
+    </div>
   );
 }

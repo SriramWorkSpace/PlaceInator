@@ -15,16 +15,33 @@ export interface NavItem {
   path: string;
   label: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
+  /** CSS custom property name (without var()) driving this section's badge
+   * and eyebrow-label color -- see the --section-* tokens in index.css. */
+  color: string;
 }
 
 export const NAV_ITEMS: NavItem[] = [
-  { path: "/", label: "Dashboard", icon: HomeIcon },
-  { path: "/jobs", label: "Jobs", icon: SearchIcon },
-  { path: "/resumes", label: "Resumes", icon: ResumeDocIcon },
-  { path: "/tailor", label: "Tailor", icon: CheckIcon },
-  { path: "/career", label: "Career", icon: BookIcon },
-  { path: "/outreach", label: "Outreach", icon: GroupsIcon },
-  { path: "/placement", label: "Placement", icon: GroupsIcon },
+  { path: "/", label: "Dashboard", icon: HomeIcon, color: "--section-dashboard" },
+  { path: "/jobs", label: "Jobs", icon: SearchIcon, color: "--section-jobs" },
+  { path: "/resumes", label: "Resumes", icon: ResumeDocIcon, color: "--section-resumes" },
+  { path: "/tailor", label: "Tailor", icon: CheckIcon, color: "--section-tailor" },
+  { path: "/career", label: "Career", icon: BookIcon, color: "--section-career" },
+  { path: "/outreach", label: "Outreach", icon: GroupsIcon, color: "--section-outreach" },
+  { path: "/placement", label: "Placement", icon: GroupsIcon, color: "--section-placement" },
 ];
 
-export const SETTINGS_ITEM: NavItem = { path: "/settings", label: "Settings", icon: SettingsIcon };
+export const SETTINGS_ITEM: NavItem = {
+  path: "/settings",
+  label: "Settings",
+  icon: SettingsIcon,
+  color: "--fg-muted",
+};
+
+/** Look up which nav item a route belongs to, for Page's eyebrow label --
+ * so every route gets a matching "SECTION" label and accent color from one
+ * source of truth instead of passing them in at each call site. */
+export function navItemForPath(pathname: string): NavItem | undefined {
+  return [...NAV_ITEMS, SETTINGS_ITEM].find((i) =>
+    i.path === "/" ? pathname === "/" : pathname.startsWith(i.path),
+  );
+}

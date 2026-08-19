@@ -29,7 +29,7 @@ export function Resumes() {
   return (
     <Page title="Resumes" description="Your role-specific resume library (spec §3).">
       <form
-        className="flex flex-wrap items-end gap-3 rounded-md border p-4"
+        className="flex flex-wrap items-end gap-3 rounded-[var(--radius-panel)] border p-6"
         style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         onSubmit={(e) => {
           e.preventDefault();

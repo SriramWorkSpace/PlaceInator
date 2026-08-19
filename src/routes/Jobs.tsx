@@ -30,7 +30,7 @@ export function Jobs() {
       description="Paste a job description to match it against your resume library (spec §2)."
     >
       <form
-        className="space-y-3 rounded-md border p-4"
+        className="space-y-3 rounded-[var(--radius-panel)] border p-6"
         style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -106,7 +106,11 @@ export function Jobs() {
         ) : (
           <ul className="space-y-3">
             {jobs.map((job) => (
-              <li key={job.id} className="rounded-md border" style={{ borderColor: "var(--border)" }}>
+              <li
+                key={job.id}
+                className="rounded-[var(--radius-input)] border"
+                style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+              >
                 <button
                   type="button"
                   className="flex w-full items-center justify-between px-4 py-3 text-left"

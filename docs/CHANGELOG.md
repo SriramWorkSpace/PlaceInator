@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Frontend visual language rebuilt around a warm "studio" reference**,
+  superseding the earlier GitHub-adjacent direction — self-hosted Fraunces
+  display serif, cream palette, pill controls, per-section accent colors.
+  See [ADR 0006](./decisions/0006-studio-visual-language.md). Fixed a real
+  gap while touching the type system: Inter was previously only referenced
+  by CSS name, never actually loaded, so it silently fell back to whatever
+  the OS had installed.
+
 ### Added
 
 - **Project foundation (M0).** Python sidecar (FastAPI + uvicorn) with an

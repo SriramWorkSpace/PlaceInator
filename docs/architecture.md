@@ -150,12 +150,25 @@ SQLite in the per-user data directory (`Settings.data_dir`), WAL mode, foreign k
 
 ## Frontend
 
-GitHub-adjacent, not GitHub: 8px spacing scale, one accent colour, 1px borders,
-`ui-monospace` for code, no gradients or hero sections. Design tokens live in
-`src/styles/index.css` and handle light, dark, and system themes.
+A warm "studio" visual language — self-hosted Fraunces for display headings,
+Inter for UI text, cream canvas, fully-rounded pill controls, and a distinct
+muted accent color per section — superseding the original flat GitHub-adjacent
+brief. See [ADR 0006](./decisions/0006-studio-visual-language.md) for why, and
+for the note that `specification.md`'s UI section (lines 767-807) is not kept
+in sync with this. Design tokens live in `src/styles/index.css` and handle
+light, dark, and system themes.
 
-`src/components/AppShell.tsx` provides the fixed left navigation from spec lines
-812-826. `src/routes/` holds one module per nav item.
+`Page` and `SectionCard` (`src/components/Page.tsx`) share one recurring
+pattern — a colored eyebrow naming the section, a serif display heading, then
+content — derived automatically from the current route via
+`navItemForPath` (`src/lib/nav.ts`), so a route file only ever passes a title
+and description.
+
+`src/components/AppShell.tsx` keeps all chrome in a single sidebar column:
+logo, the seven-item navigation from spec lines 812-826 plus Settings, and a
+footer row for the collapse toggle, theme toggle, and profile indicator.
+There is deliberately no separate top bar. `src/routes/` holds one module per
+nav item.
 
 **Monaco is lazy-loaded on the Tailor route only** — it is several MB against a current
 total bundle of ~180 KB, and no other route needs an editor.
