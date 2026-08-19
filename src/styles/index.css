@@ -14,6 +14,11 @@
   --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Consolas, monospace;
 
   --radius-panel: 6px;
+
+  /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
+     CSS ease-out is too weak; this is the standard replacement. Reuse this
+     token for future motion rather than inlining a new cubic-bezier. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 :root {
@@ -128,4 +133,61 @@ textarea,
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * Motion: top-bar icon buttons.
+ *
+ * One rule set shared by every icon-only button (sidebar toggle, theme
+ * toggle, profile), so press/hover feedback is consistent instead of
+ * redefined ad hoc per button. transform + opacity only; hover gated to
+ * fine pointers; reduced-motion keeps the opacity cue and drops the scale.
+ * ------------------------------------------------------------------ */
+
+.icon-btn {
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 100ms var(--ease-out);
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+@media (hover: hover) and (pointer: fine) {
+  .icon-btn:hover {
+    opacity: 0.75;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn {
+    transition: opacity 150ms ease;
+  }
+  .icon-btn:active {
+    transform: none;
+  }
+}
+
+/* Theme toggle: two icons stacked in the same box, crossfading between
+ * states -- purpose is state indication, not decoration, so the motion
+ * stays restrained (opacity + a modest scale, no rotate). */
+.theme-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+.theme-icon[data-hidden="true"] {
+  opacity: 0;
+  transform: scale(0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  .theme-icon {
+    transition: opacity 160ms ease;
+  }
+  .theme-icon[data-hidden="true"] {
+    transform: none;
+  }
 }

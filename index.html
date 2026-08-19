@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PlaceInator</title>
+    <script>
+      // Runs before first paint so a returning user's saved theme choice
+      // (see src/lib/theme.ts) never flashes the wrong theme on load.
+      (function () {
+        try {
+          var saved = localStorage.getItem("placeinator-theme");
+          if (saved === "light" || saved === "dark") {
+            document.documentElement.dataset.theme = saved;
+          }
+        } catch (_e) {
+          // localStorage unavailable; fall back to the prefers-color-scheme
+          // media query already handled in styles/index.css.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

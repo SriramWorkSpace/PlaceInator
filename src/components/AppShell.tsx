@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { MenuIcon } from "@/components/icons";
+import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
+import { getProfile, NotOnboardedError } from "@/lib/api";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
+import { useTheme } from "@/lib/theme";
 
 /**
  * The application chrome: top bar, fixed left navigation, and a scrolling work
@@ -44,17 +47,65 @@ function TopBar({
         onClick={onToggleCollapsed}
         aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
         aria-pressed={collapsed}
-        className="-ml-1 rounded p-1 transition-colors hover:opacity-80"
+        className="icon-btn -ml-1 rounded p-1"
         style={{ color: "var(--fg-muted)" }}
       >
         <MenuIcon />
       </button>
       <span className="text-sm font-semibold tracking-tight">PlaceInator</span>
       <div className="flex-1" />
-      <span className="font-mono text-xs" style={{ color: "var(--fg-subtle)" }}>
-        v0.1.0
-      </span>
+      <ThemeToggle />
+      <ProfileButton />
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-pressed={isDark}
+      className="icon-btn relative h-7 w-7 shrink-0 rounded"
+      style={{ color: "var(--fg-muted)" }}
+    >
+      {/* Both icons stay mounted so the swap is a CSS transition, not a
+       * remount -- required for a control the user can click rapidly. */}
+      <span className="theme-icon" data-hidden={!isDark}>
+        <LightModeIcon width={18} height={18} />
+      </span>
+      <span className="theme-icon" data-hidden={isDark}>
+        <DarkModeIcon width={18} height={18} />
+      </span>
+    </button>
+  );
+}
+
+function ProfileButton() {
+  const navigate = useNavigate();
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getProfile,
+    retry: (count, err) => !(err instanceof NotOnboardedError) && count < 2,
+  });
+
+  const label = profile?.full_name?.trim() || "Complete profile";
+
+  return (
+    <button
+      type="button"
+      onClick={() => navigate("/settings")}
+      className="icon-btn flex shrink-0 items-center gap-1.5 rounded px-1.5 py-1 text-xs font-medium"
+      style={{ color: profile ? "var(--fg-muted)" : "var(--accent)" }}
+      title={profile ? profile.email : "Onboarding not complete"}
+    >
+      <PersonIcon width={18} height={18} />
+      <span className="max-w-32 truncate">{label}</span>
+    </button>
   );
 }
 

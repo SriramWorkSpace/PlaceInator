@@ -1,11 +1,11 @@
 import type { ComponentType, SVGProps } from "react";
 
 import {
+  BookIcon,
   CheckIcon,
-  FavoriteIcon,
   GroupsIcon,
   HomeIcon,
-  InventoryIcon,
+  ResumeDocIcon,
   SearchIcon,
   SettingsIcon,
 } from "@/components/icons";
@@ -20,9 +20,9 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Dashboard", icon: HomeIcon },
   { path: "/jobs", label: "Jobs", icon: SearchIcon },
-  { path: "/resumes", label: "Resumes", icon: InventoryIcon },
+  { path: "/resumes", label: "Resumes", icon: ResumeDocIcon },
   { path: "/tailor", label: "Tailor", icon: CheckIcon },
-  { path: "/career", label: "Career", icon: FavoriteIcon },
+  { path: "/career", label: "Career", icon: BookIcon },
   { path: "/outreach", label: "Outreach", icon: GroupsIcon },
   { path: "/placement", label: "Placement", icon: GroupsIcon },
 ];
