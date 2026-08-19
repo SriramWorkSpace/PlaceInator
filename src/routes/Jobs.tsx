@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button, ErrorText, Field, TextArea, TextInput } from "@/components/Form";
 import { EmptyState, Page } from "@/components/Page";
 import { Table, TableCell, TableHead, TableRow } from "@/components/Table";
-import { DatePickerField } from "@/components/ui/date-picker";
 import { createManualJob, listJobs, rankResumesForJob } from "@/lib/api";
 import type { MatchOut } from "@/lib/types";
+
+// Ark UI + @internationalized/date pull in real weight (~180KB raw) for one
+// field on one route -- lazy-loaded the same way Monaco is lazy-loaded on
+// Tailor only, rather than paid for by every route's initial load.
+const DatePickerField = lazy(() =>
+  import("@/components/ui/date-picker").then((m) => ({ default: m.DatePickerField })),
+);
 
 const EMPTY_JOB = {
   company: "",
@@ -79,11 +85,13 @@ export function Jobs() {
             </Field>
           </div>
           <div className="w-44">
-            <DatePickerField
-              label="Application deadline"
-              value={form.deadline}
-              onValueChange={(deadline) => setForm({ ...form, deadline })}
-            />
+            <Suspense fallback={<DatePickerFieldSkeleton />}>
+              <DatePickerField
+                label="Application deadline"
+                value={form.deadline}
+                onValueChange={(deadline) => setForm({ ...form, deadline })}
+              />
+            </Suspense>
           </div>
         </div>
 
@@ -204,6 +212,18 @@ function RankedResumes({ jobId }: { jobId: number }) {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+/** Matches DatePickerField's real label+control markup exactly (reusing the
+ * same Field/TextInput this file already imports) so there's no layout
+ * shift once the lazy chunk finishes loading -- not a from-scratch guess at
+ * matching dimensions. */
+function DatePickerFieldSkeleton() {
+  return (
+    <Field label="Application deadline">
+      <TextInput disabled placeholder="Pick a date" />
+    </Field>
+  );
 }
 
 function formatDeadline(isoDate: string): string {

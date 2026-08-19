@@ -170,5 +170,12 @@ footer row for the collapse toggle, theme toggle, and profile indicator.
 There is deliberately no separate top bar. `src/routes/` holds one module per
 nav item.
 
-**Monaco is lazy-loaded on the Tailor route only** — it is several MB against a current
-total bundle of ~180 KB, and no other route needs an editor.
+**Heavy, narrowly-used dependencies are lazy-loaded, not bundled eagerly.**
+Monaco will be lazy-loaded on the Tailor route only once it lands — several MB
+against an initial bundle that should stay small, and no other route needs an
+editor. `DatePickerField` (Ark UI + `@internationalized/date`, ~180KB raw) is
+lazy-loaded the same way in `src/routes/Jobs.tsx` via `React.lazy` +
+`Suspense`, since it is one field on one route. This is deliberately
+selective, not a blanket per-component split: `motion` (the theme toggle's
+Switch) stays eager because it renders in the always-mounted sidebar chrome,
+where a lazy-loaded flash-in would cost more than it saves.
