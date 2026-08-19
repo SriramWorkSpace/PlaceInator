@@ -6,13 +6,14 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from placeinator.db.models import Job
 from placeinator.db.session import get_session
-from placeinator.jobs.service import create_manual_job, list_jobs
+from placeinator.jobs.service import create_manual_job, list_jobs, sync_ats_feed
+from placeinator.jobs.sources.base import SourceBlocked
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -69,3 +70,38 @@ def add_manual_job(data: ManualJobIn, session: Session = Depends(get_session)) -
         deadline=data.deadline,
     )
     return _to_out(job)
+
+
+class AtsFeedIn(BaseModel):
+    # "platform:company-slug", e.g. "greenhouse:stripe" -- validated against
+    # the same three platforms placeinator.jobs.sources.ats_feed supports,
+    # so a typo 404s here with a clear message rather than deep inside a
+    # scrape.
+    companies: list[str] = Field(min_length=1)
+
+    @staticmethod
+    def _valid_entry(entry: str) -> bool:
+        platform, _, slug = entry.partition(":")
+        return platform in ("greenhouse", "lever", "ashby") and bool(slug)
+
+
+class AtsFeedOut(BaseModel):
+    jobs: list[JobOut]
+    # Present, and jobs empty, when ADR 0003's boundary was hit -- the UI's
+    # response is to offer manual paste, not to show an error.
+    blocked_reason: str | None = None
+
+
+@router.post("/ats-feed", response_model=AtsFeedOut)
+def add_ats_feed_jobs(data: AtsFeedIn, session: Session = Depends(get_session)) -> AtsFeedOut:
+    invalid = [e for e in data.companies if not AtsFeedIn._valid_entry(e)]
+    if invalid:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"expected 'platform:company-slug' (greenhouse/lever/ashby), got: {invalid}",
+        )
+
+    result = sync_ats_feed(session, data.companies)
+    if isinstance(result, SourceBlocked):
+        return AtsFeedOut(jobs=[], blocked_reason=result.reason)
+    return AtsFeedOut(jobs=[_to_out(job) for job in result])

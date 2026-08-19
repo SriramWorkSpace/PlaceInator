@@ -21,6 +21,9 @@ dependencies = [
     "python-docx>=1.1",
     "openpyxl>=3.1",
     "pylatexenc>=2.10",
+    # Job source adapters (ADR 0003): manual + ats_feed ship in M2's first
+    # slice. Indeed/LinkedIn/Naukri will need Playwright when they land.
+    "selectolax>=0.4",
 ]
 
 [project.optional-dependencies]
