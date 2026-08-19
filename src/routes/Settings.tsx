@@ -137,7 +137,11 @@ export function Settings() {
           />
         </Field>
 
-        {mutation.isError && <ErrorText>{(mutation.error as Error).message}</ErrorText>}
+        {mutation.isError && (
+          <ErrorText onDismiss={() => mutation.reset()}>
+            {(mutation.error as Error).message}
+          </ErrorText>
+        )}
 
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? "Saving…" : data ? "Save changes" : "Complete onboarding"}

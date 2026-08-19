@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { CheckCircleIcon } from "@/components/icons";
 import { EmptyState, Page } from "@/components/Page";
 import { getStatus, SidecarUnavailableError } from "@/lib/api";
 
@@ -42,7 +43,8 @@ function SidecarStatus() {
     >
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-medium">Local engine</h2>
-        <span className="font-mono text-xs" style={{ color: tone }}>
+        <span className="flex items-center gap-1 font-mono text-xs" style={{ color: tone }}>
+          {!isPending && !error && <CheckCircleIcon width={14} height={14} />}
           {state}
         </span>
       </div>

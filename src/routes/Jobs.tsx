@@ -82,7 +82,11 @@ export function Jobs() {
           />
         </Field>
 
-        {addJob.isError && <ErrorText>{(addJob.error as Error).message}</ErrorText>}
+        {addJob.isError && (
+          <ErrorText onDismiss={() => addJob.reset()}>
+            {(addJob.error as Error).message}
+          </ErrorText>
+        )}
 
         <Button type="submit" disabled={addJob.isPending}>
           {addJob.isPending ? "Adding…" : "Add job"}
@@ -156,7 +160,7 @@ function RankedResumes({ jobId }: { jobId: number }) {
   }
 
   if (rank.isError) {
-    return <ErrorText>{(rank.error as Error).message}</ErrorText>;
+    return <ErrorText onDismiss={() => rank.reset()}>{(rank.error as Error).message}</ErrorText>;
   }
 
   return (

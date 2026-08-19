@@ -1,5 +1,7 @@
 import type { InputHTMLAttributes, ReactNode, TextareaHTMLAttributes } from "react";
 
+import { CloseIcon } from "@/components/icons";
+
 /** A labeled form field, matching the flat/bordered GitHub-adjacent tokens. */
 export function Field({
   label,
@@ -79,10 +81,31 @@ export function Button({
   );
 }
 
-export function ErrorText({ children }: { children: ReactNode }) {
+export function ErrorText({
+  children,
+  onDismiss,
+}: {
+  children: ReactNode;
+  /** When provided, renders a close button that clears the error (e.g. a
+   * mutation's reset()) so a stale message doesn't linger after retrying. */
+  onDismiss?: () => void;
+}) {
   return (
-    <p className="selectable text-xs" style={{ color: "var(--danger)" }}>
-      {children}
+    <p
+      className="selectable flex items-start gap-1.5 text-xs"
+      style={{ color: "var(--danger)" }}
+    >
+      <span className="flex-1">{children}</span>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 opacity-70 hover:opacity-100"
+        >
+          <CloseIcon width={14} height={14} />
+        </button>
+      )}
     </p>
   );
 }

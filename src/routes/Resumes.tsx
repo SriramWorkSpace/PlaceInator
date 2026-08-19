@@ -89,7 +89,9 @@ export function Resumes() {
 
       {mutation.isError && (
         <div className="mt-2">
-          <ErrorText>{(mutation.error as Error).message}</ErrorText>
+          <ErrorText onDismiss={() => mutation.reset()}>
+            {(mutation.error as Error).message}
+          </ErrorText>
         </div>
       )}
 
