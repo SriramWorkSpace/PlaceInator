@@ -36,6 +36,10 @@
   /* Lighter than --shadow-popover -- an inline card lifting slightly needs
      less separation from the page than a floating menu does. */
   --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+  /* Resting-state elevation -- every card floats a little even before
+     hover, not just on interaction. Lighter than the hover shadow so the
+     hover state still reads as a distinct lift, not just more of the same. */
+  --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.10), 0 1px 3px -1px rgb(0 0 0 / 0.06);
 
   /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
      CSS ease-out is too weak; this is the standard replacement. Reuse this
@@ -238,32 +242,6 @@ textarea,
   }
 }
 
-/* Theme toggle: two icons stacked in the same box, crossfading between
- * states -- purpose is state indication, not decoration, so the motion
- * stays restrained (opacity + a modest scale, no rotate). */
-.theme-icon {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    opacity 160ms var(--ease-out),
-    transform 160ms var(--ease-out);
-}
-.theme-icon[data-hidden="true"] {
-  opacity: 0;
-  transform: scale(0.9);
-}
-@media (prefers-reduced-motion: reduce) {
-  .theme-icon {
-    transition: opacity 160ms ease;
-  }
-  .theme-icon[data-hidden="true"] {
-    transform: none;
-  }
-}
-
 /* ------------------------------------------------------------------ *
  * Pill buttons and inputs -- "Tactile, legible, consistent": a 48px
  * comfort target, a visible keyboard focus ring, and press feedback that
@@ -384,18 +362,28 @@ textarea,
 }
 
 /* ------------------------------------------------------------------ *
- * Card hover depth.
+ * Card elevation.
  *
- * Gate: hover-effects frequency tier -- kept fast and near-imperceptible,
- * not dramatic. Purpose: state indication that the card is interactive.
- * Applied only to card surfaces that actually lead somewhere on click
- * (SectionCard, the Jobs list rows) -- a lift on a purely informational
- * panel would be a false affordance, implying clickability that isn't
- * there. transform + box-shadow only, ease-out, 150ms, hover-gated to fine
- * pointers, reduced-motion drops the transform and keeps the shadow cue.
+ * .card: every bordered panel gets a resting shadow, not just the
+ * interactive ones -- floating/depth is the base look, not an interaction
+ * cue. Static box-shadow, no gating needed since nothing here moves on
+ * its own.
+ *
+ * .card-hover: layered on top of .card for surfaces that actually lead
+ * somewhere on click (SectionCard, the Jobs list rows) -- a lift on a
+ * purely informational panel would be a false affordance, implying
+ * clickability that isn't there. Gate: hover-effects frequency tier, kept
+ * fast and near-imperceptible. Purpose: state indication. transform +
+ * box-shadow only, ease-out, 150ms, hover-gated to fine pointers,
+ * reduced-motion drops the transform and keeps the shadow cue.
  * ------------------------------------------------------------------ */
 
+.card {
+  box-shadow: var(--shadow-card);
+}
+
 .card-hover {
+  box-shadow: var(--shadow-card);
   transition:
     transform 150ms var(--ease-out),
     box-shadow 150ms var(--ease-out);
@@ -413,4 +401,21 @@ textarea,
   .card-hover:hover {
     transform: none;
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Theme toggle: circular reveal from the click point.
+ *
+ * The View Transitions API's own default is a plain crossfade of the
+ * before/after snapshots; disabled here so only the clip-path circle
+ * driven by src/lib/theme.ts is visible. Reduced motion never reaches
+ * this path at all -- useTheme skips startViewTransition entirely when
+ * prefers-reduced-motion is set, rather than playing a gentler version of
+ * a full-screen reveal.
+ * ------------------------------------------------------------------ */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }

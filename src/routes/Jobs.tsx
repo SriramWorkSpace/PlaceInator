@@ -37,7 +37,7 @@ export function Jobs() {
       description="Paste a job description to match it against your resume library (spec §2)."
     >
       <form
-        className="space-y-3 rounded-[var(--radius-panel)] border p-6"
+        className="card space-y-3 rounded-[var(--radius-panel)] border p-6"
         style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         onSubmit={(e) => {
           e.preventDefault();

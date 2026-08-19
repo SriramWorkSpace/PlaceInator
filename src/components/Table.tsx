@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 export function Table({ children }: { children: ReactNode }) {
   return (
     <div
-      className="overflow-x-auto rounded-[var(--radius-input)] border"
+      className="card overflow-x-auto rounded-[var(--radius-input)] border"
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
       <table className="w-full border-collapse text-sm">{children}</table>

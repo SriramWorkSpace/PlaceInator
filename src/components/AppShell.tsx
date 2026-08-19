@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
+import { Switch } from "@/components/ui/switch";
 import { getProfile, NotOnboardedError } from "@/lib/api";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { useTheme } from "@/lib/theme";
@@ -194,22 +195,18 @@ function ThemeToggle() {
   const isDark = theme === "dark";
 
   return (
-    <button
-      type="button"
-      onClick={toggleTheme}
+    <div
+      className="fixed right-4 top-4 z-10"
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      aria-pressed={isDark}
-      className="icon-btn fixed right-4 top-4 z-10 h-9 w-9 rounded-full border"
-      style={{ color: "var(--fg-muted)", borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
-      {/* Both icons stay mounted so the swap is a CSS transition, not a
-       * remount -- required for a control the user can click rapidly. */}
-      <span className="theme-icon" data-hidden={!isDark}>
-        <LightModeIcon width={18} height={18} />
-      </span>
-      <span className="theme-icon" data-hidden={isDark}>
-        <DarkModeIcon width={18} height={18} />
-      </span>
-    </button>
+      <Switch
+        value={isDark}
+        // The click's own coordinates anchor the circular reveal --
+        // src/lib/theme.ts expands it from exactly this point.
+        onToggle={(event) => toggleTheme({ x: event.clientX, y: event.clientY })}
+        iconOn={<DarkModeIcon width={14} height={14} />}
+        iconOff={<LightModeIcon width={14} height={14} />}
+      />
+    </div>
   );
 }
