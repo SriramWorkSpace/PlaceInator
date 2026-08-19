@@ -1,0 +1,20 @@
+# Normalize to LF in the repository. CI runs the frontend job on Linux and the
+# Python job on Windows, so without this the same file hashes differently
+# between them and diffs fill with phantom whole-file changes.
+* text=auto eol=lf
+
+# Windows-only entry points that must keep CRLF to run.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary: never touch.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.onnx binary
+*.xlsx binary
+*.docx binary

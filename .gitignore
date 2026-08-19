@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+*.spec
+
+# ONNX models are downloaded at first run into the per-user data directory
+# (see Settings.models_dir) -- deliberately NOT into the repo, so a packaged
+# install and a dev checkout resolve them the same way.
+
+# Node
+node_modules/
+dist-frontend/
+.vite/
+
+# Tauri
+src-tauri/target/
+src-tauri/binaries/
+
+# App data / secrets
+*.db
+*.sqlite3
+credentials.json
+token.json
+.env
+
+# OS
+Thumbs.db
+.DS_Store
