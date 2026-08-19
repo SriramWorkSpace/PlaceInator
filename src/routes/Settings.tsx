@@ -40,7 +40,7 @@ export function Settings() {
 
   if (isPending) {
     return (
-      <Page title="Settings" description="Profile, preferences, and employment constraints.">
+      <Page title="Profile & Preferences" description="Profile, preferences, and employment constraints.">
         <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
           Loading…
         </p>
@@ -50,7 +50,7 @@ export function Settings() {
 
   return (
     <Page
-      title="Settings"
+      title="Profile & Preferences"
       description={
         data
           ? "Your profile is complete. Anything here can be edited and re-saved."

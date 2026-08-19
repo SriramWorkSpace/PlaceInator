@@ -26,7 +26,7 @@ export function Jobs() {
 
   return (
     <Page
-      title="Jobs"
+      title="Job Intelligence"
       description="Paste a job description to match it against your resume library (spec §2)."
     >
       <form
