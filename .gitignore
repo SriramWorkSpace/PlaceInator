@@ -50,3 +50,6 @@ token.json
 # OS
 Thumbs.db
 .DS_Store
+
+# graphify knowledge-graph output (regenerated locally, not part of the source tree)
+graphify-out/

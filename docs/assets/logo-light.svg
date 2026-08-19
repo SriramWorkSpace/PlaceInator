@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="560" height="120" viewBox="0 0 560 120">
-  <!-- Same rotated rounded-square mark as the app's real sidebar logo
-       (src/components/AppShell.tsx), in the light-theme accent color
-       (--accent: #5d4a9e) -- not a new logo, the actual one. -->
-  <rect x="34" y="34" width="52" height="52" rx="10" fill="#5d4a9e" transform="rotate(45 60 60)" />
-  <text x="128" y="78" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="600" fill="#211f1a">PlaceInator</text>
-</svg>

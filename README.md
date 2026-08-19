@@ -1,14 +1,5 @@
-<p align="center">
-<a href="#readme">
-<img width="480" src="docs/assets/logo-light.svg#gh-light-mode-only">
-</a>
-<a href="#readme">
-<img width="480" src="docs/assets/logo-dark.svg#gh-dark-mode-only">
-</a>
-</p>
-<p align="center">
-  <p align="center">A local-first placement assistant: resume↔job matching, LaTeX resume tailoring, and Gmail→Calendar automation</p>
-</p>
+<h1 align="center">PlaceInator</h1>
+<p align="center">A local-first placement assistant: resume↔job matching, LaTeX resume tailoring, and Gmail→Calendar automation</p>
 <h4 align="center">
     <a href="#setup"><strong>Get started »</strong></a>
     <br />
