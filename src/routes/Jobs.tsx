@@ -123,7 +123,7 @@ export function Jobs() {
             {jobs.map((job) => (
               <li
                 key={job.id}
-                className="rounded-[var(--radius-input)] border"
+                className="card-hover rounded-[var(--radius-input)] border"
                 style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
               >
                 <button

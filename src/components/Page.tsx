@@ -97,7 +97,7 @@ export function SectionCard({
 }) {
   return (
     <section
-      className="rounded-[var(--radius-panel)] border p-6"
+      className="card-hover rounded-[var(--radius-panel)] border p-6"
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
       <div className="flex items-start justify-between gap-4">

@@ -33,6 +33,9 @@
      two-layer shadow, reusable for future dropdowns/menus/tooltips rather
      than inlined once. */
   --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.18), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+  /* Lighter than --shadow-popover -- an inline card lifting slightly needs
+     less separation from the page than a floating menu does. */
+  --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
 
   /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
      CSS ease-out is too weak; this is the standard replacement. Reuse this
@@ -377,5 +380,37 @@ textarea,
 @media (prefers-reduced-motion: reduce) {
   .sidebar-row {
     transition-duration: 1ms;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Card hover depth.
+ *
+ * Gate: hover-effects frequency tier -- kept fast and near-imperceptible,
+ * not dramatic. Purpose: state indication that the card is interactive.
+ * Applied only to card surfaces that actually lead somewhere on click
+ * (SectionCard, the Jobs list rows) -- a lift on a purely informational
+ * panel would be a false affordance, implying clickability that isn't
+ * there. transform + box-shadow only, ease-out, 150ms, hover-gated to fine
+ * pointers, reduced-motion drops the transform and keeps the shadow cue.
+ * ------------------------------------------------------------------ */
+
+.card-hover {
+  transition:
+    transform 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-hover {
+    transition: box-shadow 150ms ease;
+  }
+  .card-hover:hover {
+    transform: none;
   }
 }
