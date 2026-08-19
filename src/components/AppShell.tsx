@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 
 import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
 import { getProfile, NotOnboardedError } from "@/lib/api";
@@ -8,12 +8,15 @@ import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { useTheme } from "@/lib/theme";
 
 /**
- * The application chrome: a single left column carrying the logo mark,
- * navigation, and utility controls, and a scrolling work area alongside it.
+ * The application chrome: a single left column carrying the logo mark and
+ * navigation, a floating theme toggle anchored to the page corner, and a
+ * scrolling work area alongside the sidebar.
  *
  * Deliberately no separate top bar -- the reference this design follows
- * (docs/decisions/0006-studio-visual-language.md) keeps everything in one
- * sidebar column rather than splitting chrome across a header and a rail.
+ * (docs/decisions/0006-studio-visual-language.md) keeps navigation chrome in
+ * one sidebar column. The theme toggle is the one control that lives outside
+ * that column, fixed to the page rather than the sidebar, so it stays put
+ * regardless of collapse state or which route is open.
  *
  * Only the workspace scrolls. The shell itself is desktop chrome and must
  * never move, which is why `body` carries `overflow: hidden` in
@@ -28,6 +31,7 @@ export function AppShell() {
       <main className="min-w-0 flex-1 overflow-y-auto">
         <Outlet />
       </main>
+      <ThemeToggle />
     </div>
   );
 }
@@ -52,12 +56,15 @@ function Sidebar({
         ))}
       </ul>
 
+      {/* Profile sits directly above Settings -- identity and account
+       * configuration read as one group. */}
       <ul className="flex flex-col gap-1">
+        <ProfileLink collapsed={collapsed} />
         <SidebarLink item={SETTINGS_ITEM} collapsed={collapsed} />
       </ul>
 
       <div
-        className="mt-3 flex items-center gap-1 border-t pt-3"
+        className="mt-3 flex justify-center border-t pt-3"
         style={{ borderColor: "var(--border)" }}
       >
         <button
@@ -70,9 +77,6 @@ function Sidebar({
         >
           <MenuIcon className="mx-auto" width={16} height={16} />
         </button>
-        <ThemeToggle />
-        <div className="flex-1" />
-        <ProfileButton collapsed={collapsed} />
       </div>
     </nav>
   );
@@ -103,6 +107,18 @@ function Logo({ collapsed }: { collapsed: boolean }) {
   );
 }
 
+/** Shared row treatment for both nav links and the profile link.
+ *
+ * Collapsed sidebar content is 40px wide (w-16 minus the nav's own p-3).
+ * The 28px badge (h-7 w-7) only fits inside that with near-zero horizontal
+ * padding and centered justification -- the expanded row's px-2.5 was
+ * previously left in place unconditionally, which overflowed the badge
+ * past the sidebar's edge in collapsed mode. */
+function navRowClassName(collapsed: boolean): string {
+  const padding = collapsed ? "justify-center px-1" : "px-2.5";
+  return `flex items-center gap-2.5 rounded-2xl py-2 text-sm transition-colors ${padding}`;
+}
+
 function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const Icon = item.icon;
   return (
@@ -112,7 +128,7 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
         // `end` keeps "/" from matching every route.
         end={item.path === "/"}
         title={collapsed ? item.label : undefined}
-        className="flex items-center gap-2.5 rounded-2xl px-2.5 py-2 text-sm transition-colors"
+        className={navRowClassName(collapsed)}
         style={({ isActive }) => ({
           background: isActive ? "var(--canvas-subtle)" : "transparent",
           border: `1px solid ${isActive ? "var(--border)" : "transparent"}`,
@@ -132,6 +148,39 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
   );
 }
 
+function ProfileLink({ collapsed }: { collapsed: boolean }) {
+  const { data: profile } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getProfile,
+    retry: (count, err) => !(err instanceof NotOnboardedError) && count < 2,
+  });
+
+  const label = profile?.full_name?.trim() || "Complete profile";
+
+  return (
+    <li>
+      <NavLink
+        to="/settings"
+        title={collapsed ? label : undefined}
+        className={navRowClassName(collapsed)}
+        style={{ color: profile ? "var(--fg-muted)" : "var(--accent)", fontWeight: 500 }}
+      >
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+          style={{
+            background: profile
+              ? "color-mix(in srgb, var(--fg-muted) 20%, transparent)"
+              : "var(--accent-subtle)",
+          }}
+        >
+          <PersonIcon width={16} height={16} />
+        </span>
+        {!collapsed && <span className="truncate">{label}</span>}
+      </NavLink>
+    </li>
+  );
+}
+
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
@@ -142,8 +191,8 @@ function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       aria-pressed={isDark}
-      className="icon-btn relative h-8 w-8 shrink-0 rounded-full"
-      style={{ color: "var(--fg-muted)" }}
+      className="icon-btn fixed right-4 top-4 z-10 h-9 w-9 rounded-full border"
+      style={{ color: "var(--fg-muted)", borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
       {/* Both icons stay mounted so the swap is a CSS transition, not a
        * remount -- required for a control the user can click rapidly. */}
@@ -153,30 +202,6 @@ function ThemeToggle() {
       <span className="theme-icon" data-hidden={isDark}>
         <DarkModeIcon width={18} height={18} />
       </span>
-    </button>
-  );
-}
-
-function ProfileButton({ collapsed }: { collapsed: boolean }) {
-  const navigate = useNavigate();
-  const { data: profile } = useQuery({
-    queryKey: ["profile"],
-    queryFn: getProfile,
-    retry: (count, err) => !(err instanceof NotOnboardedError) && count < 2,
-  });
-
-  const label = profile?.full_name?.trim() || "Complete profile";
-
-  return (
-    <button
-      type="button"
-      onClick={() => navigate("/settings")}
-      className="icon-btn flex shrink-0 items-center gap-1.5 rounded-full px-1.5 py-1 text-xs font-medium"
-      style={{ color: profile ? "var(--fg-muted)" : "var(--accent)" }}
-      title={profile ? profile.email : "Onboarding not complete"}
-    >
-      <PersonIcon width={18} height={18} />
-      {!collapsed && <span className="max-w-24 truncate">{label}</span>}
     </button>
   );
 }
