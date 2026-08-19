@@ -15,10 +15,16 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m ruff check placeinator tests
+      - run: python -m ruff check placeinator tests migrations
       - run: python -m mypy placeinator
-      # -m 'not live' is the default in pyproject; network adapters are opt-in.
+      # "not live and not model" is the default in pyproject: job-source
+      # adapters and the real embedding model are both opt-in.
       - run: python -m pytest tests/ -q
+      # Downloads the real ~130 MB embedding model on every run (no cache
+      # configured for it yet) -- allowed to fail on transient Hugging Face
+      # Hub issues without blocking the required checks above.
+      - run: python -m pytest tests/integration/test_scoring.py -m model -q
+        continue-on-error: true
 
   frontend:
     runs-on: ubuntu-latest

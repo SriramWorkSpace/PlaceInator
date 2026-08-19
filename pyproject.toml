@@ -2,29 +2,28 @@
 name = "placeinator"
 version = "0.1.0"
 description = "PlaceInator sidecar: matching, document intelligence, and placement automation"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
+    "python-multipart>=0.0.17",  # required for FastAPI file/form uploads
     "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
+    "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
     "sqlalchemy>=2.0",
     "alembic>=1.14",
     "platformdirs>=4.3",
-]
-
-[project.optional-dependencies]
-matching = [
-    "fastembed>=0.4",
+    # Matching engine (ADR 0005): ONNX Runtime only, never PyTorch.
+    "fastembed>=0.8",
     "numpy>=1.26",
     "rapidfuzz>=3.10",
-]
-documents = [
+    # Document intelligence: resume/JD/placement-sheet parsing.
     "pdfplumber>=0.11",
     "python-docx>=1.1",
     "openpyxl>=3.1",
     "pylatexenc>=2.10",
 ]
+
+[project.optional-dependencies]
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
@@ -40,9 +39,14 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["placeinator*"]
 
+[tool.setuptools.package-data]
+# taxonomy.json ships inside the package so a PyInstaller bundle carries it;
+# it must never be loaded relative to the CWD.
+placeinator = ["skills/*.json"]
+
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 # Alembic writes these; reformatting generated migrations only creates churn and
 # makes the diff against a regenerated file unreadable.
 extend-exclude = ["migrations/versions"]
@@ -50,14 +54,20 @@ extend-exclude = ["migrations/versions"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's dependency-injection idiom is `param: T = Depends(...)`; calling
+# Depends() in the default *is* the API, not the footgun B008 warns about.
+"placeinator/api/*.py" = ["B008"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "live: hits real external services (opt-in, deselected by default)",
+    "model: downloads/runs the real embedding model, ~35s first run (opt-in, deselected by default)",
 ]
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not model'"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_unused_ignores = true
 ignore_missing_imports = true

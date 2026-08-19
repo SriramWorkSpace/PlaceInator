@@ -61,3 +61,20 @@ def get_session() -> Iterator[Session]:
     """FastAPI dependency variant of :func:`session_scope`."""
     with session_scope() as session:
         yield session
+
+
+def reset_engine() -> None:
+    """Test-only: drop the cached engine and session factory.
+
+    Production never calls this -- one process has exactly one database for
+    its whole life, set once from Settings.db_path. Tests that construct
+    multiple app lifetimes in the same process (e.g. one per test function,
+    each with its own temp data dir) must call this alongside
+    ``get_settings.cache_clear()``, or every test after the first silently
+    reuses the first test's SQLite file instead of its own.
+    """
+    global _engine, _SessionLocal
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
+    _SessionLocal = None

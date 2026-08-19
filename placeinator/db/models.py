@@ -122,6 +122,9 @@ class Resume(Base, TimestampMixin):
     chunks: Mapped[list[ResumeChunk]] = relationship(
         back_populates="resume", cascade="all, delete-orphan"
     )
+    matches: Mapped[list[MatchResult]] = relationship(
+        back_populates="resume", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (UniqueConstraint("profile_id", "label", "version"),)
 
@@ -263,6 +266,7 @@ class MatchResult(Base, TimestampMixin):
     scoring_version: Mapped[str] = mapped_column(String(32), default="")
 
     job: Mapped[Job] = relationship(back_populates="matches")
+    resume: Mapped[Resume] = relationship(back_populates="matches")
 
     __table_args__ = (
         UniqueConstraint("job_id", "resume_id", name="uq_match_job_resume"),
