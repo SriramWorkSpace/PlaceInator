@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="120" viewBox="0 0 560 120">
+  <!-- Dark-theme variant: --accent dark (#b3a3e8) mark, --fg dark (#efe9da)
+       text -- the same two tokens the running app itself swaps to under
+       :root[data-theme="dark"] in src/styles/index.css. -->
+  <rect x="34" y="34" width="52" height="52" rx="10" fill="#b3a3e8" transform="rotate(45 60 60)" />
+  <text x="128" y="78" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="600" fill="#efe9da">PlaceInator</text>
+</svg>
