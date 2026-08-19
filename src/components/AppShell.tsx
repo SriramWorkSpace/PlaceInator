@@ -113,8 +113,14 @@ function Logo({ collapsed }: { collapsed: boolean }) {
  * previously left in place unconditionally, which overflowed the badge
  * past the sidebar's edge in collapsed mode. */
 function navRowClassName(collapsed: boolean): string {
-  const padding = collapsed ? "justify-center px-1" : "px-2.5";
-  return `sidebar-row flex items-center gap-2.5 rounded-2xl py-2 text-sm transition-colors ${padding}`;
+  // gap-2.5 must drop to gap-0 when collapsed: the label span stays mounted
+  // (max-width: 0) rather than unmounting, so a nonzero gap still reserves
+  // space after it even though it's invisible. With justify-center, that
+  // reserved gap became part of the centered block and pushed the badge off
+  // to the left of true center -- the badge, not the gap, needs to be the
+  // only thing this row centers.
+  const layout = collapsed ? "justify-center gap-0 px-1" : "gap-2.5 px-2.5";
+  return `sidebar-row flex items-center rounded-2xl py-2 text-sm transition-colors ${layout}`;
 }
 
 function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {

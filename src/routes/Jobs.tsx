@@ -4,10 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, ErrorText, Field, TextArea, TextInput } from "@/components/Form";
 import { EmptyState, Page } from "@/components/Page";
 import { Table, TableCell, TableHead, TableRow } from "@/components/Table";
+import { DatePickerField } from "@/components/ui/date-picker";
 import { createManualJob, listJobs, rankResumesForJob } from "@/lib/api";
 import type { MatchOut } from "@/lib/types";
 
-const EMPTY_JOB = { company: "", designation: "", location: "", description: "" };
+const EMPTY_JOB = {
+  company: "",
+  designation: "",
+  location: "",
+  description: "",
+  deadline: null as string | null,
+};
 
 export function Jobs() {
   const queryClient = useQueryClient();
@@ -40,6 +47,7 @@ export function Jobs() {
             description: form.description,
             location: form.location || null,
             url: null,
+            deadline: form.deadline,
           });
         }}
       >
@@ -69,6 +77,13 @@ export function Jobs() {
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
               />
             </Field>
+          </div>
+          <div className="w-44">
+            <DatePickerField
+              label="Application deadline"
+              value={form.deadline}
+              onValueChange={(deadline) => setForm({ ...form, deadline })}
+            />
           </div>
         </div>
 
@@ -121,6 +136,7 @@ export function Jobs() {
                     <span className="ml-2 text-sm" style={{ color: "var(--fg-muted)" }}>
                       {job.company}
                       {job.location ? ` · ${job.location}` : ""}
+                      {job.deadline ? ` · Due ${formatDeadline(job.deadline)}` : ""}
                     </span>
                   </span>
                   <span className="text-xs" style={{ color: "var(--fg-subtle)" }}>
@@ -188,4 +204,14 @@ function RankedResumes({ jobId }: { jobId: number }) {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatDeadline(isoDate: string): string {
+  // Parsed as UTC-midnight and displayed in the same zone to avoid an
+  // off-by-one day from local-timezone conversion on a date-only value.
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }

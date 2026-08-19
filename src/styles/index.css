@@ -27,6 +27,13 @@
   --radius-input: 14px;
   --radius-pill: 999px;
 
+  /* First genuinely floating/portaled element (the date picker's calendar
+     popover) needed a shadow; a flat card treatment doesn't read as
+     "detached from the page" the way a popover needs to. Restrained
+     two-layer shadow, reusable for future dropdowns/menus/tooltips rather
+     than inlined once. */
+  --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.18), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+
   /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
      CSS ease-out is too weak; this is the standard replacement. Reuse this
      token for future motion rather than inlining a new cubic-bezier. */
@@ -363,7 +370,9 @@ textarea,
 }
 
 .sidebar-row {
-  transition: padding 200ms var(--ease-in-out);
+  transition:
+    padding 200ms var(--ease-in-out),
+    gap 200ms var(--ease-in-out);
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar-row {

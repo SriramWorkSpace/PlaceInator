@@ -4,6 +4,8 @@ optional regardless of what else ships."""
 
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -21,6 +23,7 @@ class ManualJobIn(BaseModel):
     description: str = Field(min_length=1)
     location: str | None = None
     url: str | None = None
+    deadline: date | None = None
 
 
 class JobOut(BaseModel):
@@ -29,6 +32,7 @@ class JobOut(BaseModel):
     company: str
     designation: str
     location: str | None
+    deadline: date | None
     required_skill_ids: list[str]
     preferred_skill_ids: list[str]
 
@@ -42,6 +46,7 @@ def _to_out(job: Job) -> JobOut:
         company=job.company,
         designation=job.designation,
         location=job.location,
+        deadline=job.deadline,
         required_skill_ids=job.required_skill_ids,
         preferred_skill_ids=job.preferred_skill_ids,
     )
@@ -61,5 +66,6 @@ def add_manual_job(data: ManualJobIn, session: Session = Depends(get_session)) -
         description=data.description,
         location=data.location,
         url=data.url,
+        deadline=data.deadline,
     )
     return _to_out(job)

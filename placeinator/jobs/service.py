@@ -4,6 +4,8 @@ the always-available path everything else falls back to."""
 
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,6 +33,7 @@ def create_manual_job(
     description: str,
     location: str | None = None,
     url: str | None = None,
+    deadline: date | None = None,
 ) -> Job:
     """Persist a pasted job description, chunked and embedded exactly like a
     resume, so placeinator.matching.scoring can score the two symmetrically."""
@@ -40,6 +43,7 @@ def create_manual_job(
         designation=designation,
         location=location,
         url=url,
+        deadline=deadline,
         description=description,
     )
     session.add(job)

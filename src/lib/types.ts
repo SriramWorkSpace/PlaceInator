@@ -78,6 +78,8 @@ export interface ManualJobIn {
   description: string;
   location: string | null;
   url: string | null;
+  /** ISO date string ("YYYY-MM-DD"), or null. */
+  deadline: string | null;
 }
 
 export interface JobOut {
@@ -86,6 +88,7 @@ export interface JobOut {
   company: string;
   designation: string;
   location: string | null;
+  deadline: string | null;
   required_skill_ids: string[];
   preferred_skill_ids: string[];
 }
