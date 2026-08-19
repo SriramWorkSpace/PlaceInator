@@ -7,6 +7,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **M1 complete.** Full onboarding → resume upload → job intake → ranked
+  match loop, verified live through the running UI. Manual job intake gained
+  an `Application deadline` field (`Job.deadline` existed as a column since
+  M0 but was never exposed anywhere) using a shadcn-style Ark UI date picker
+  integrated at `src/components/ui/date-picker.tsx`, retokenized onto this
+  project's design system rather than left with its source's hardcoded
+  colors — see that commit for why a literal copy-paste would have silently
+  desynced from the app's theme toggle.
+- Material Symbols icon set placed across the nav, a light/dark theme toggle
+  (persisted, no flash-of-wrong-theme on load), and a profile indicator —
+  the "Profile" slot the original spec wireframe called for but was never
+  built.
+- Subtle hover depth on card surfaces (SectionCard, Jobs list rows), gated
+  to genuinely interactive ones to avoid implying clickability that isn't
+  there on purely informational panels.
+
 ### Changed
 
 - **Frontend visual language rebuilt around a warm "studio" reference**,
@@ -67,6 +85,23 @@ clean and would have surfaced later, far from its cause:
   then fail at bundle time.
 - **`npm run lint` invoked an uninstalled eslint.**
 - **Two competing locations for ONNX models** (repo root vs. per-user data directory).
+
+Four defects found while building out the M1 UI, each caught by testing the actual
+running app rather than trusting the code:
+
+- **Sidebar labels popped in at full size while the rail was still mid-width-transition**
+  (conditionally mounted on the same boolean driving the width), causing a visible
+  reflow on every expand. Labels now stay mounted and animate via max-width + opacity
+  instead.
+- **Every collapsed nav badge was off-center**, not just the one row a screenshot
+  happened to catch — an unconditional flex `gap` after an invisible zero-width label
+  still reserved space, which `justify-center` then centered as part of the block.
+- **Every page but Dashboard repeated its nav label as its own headline** ("CAREER"
+  eyebrow directly above a "Career" title). Headlines now come from the specification's
+  own section names instead.
+- **`apiFetch` forced `Content-Type: application/json` unconditionally**, which would
+  have silently broken every multipart resume upload by overriding the browser's own
+  boundary header.
 
 ### Known blockers
 

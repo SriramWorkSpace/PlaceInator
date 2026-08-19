@@ -28,22 +28,31 @@ introduces it.
 
 ## M1 — Profile, Resume, and Matching
 
-The chosen first milestone; everything else depends on it.
+*Complete.* Everything else depends on it, and does now.
 
 - Onboarding wizard (spec §1): profile, career preferences, employment constraints
 - Resume library, upload, and parsing (PDF / DOCX / `.tex`)
-- `placeinator/skills/taxonomy.json` — seed ~600 entries with aliases and category tags
+- `placeinator/skills/taxonomy.json` — aliases and category tags
 - `fastembed` integration and `placeinator/matching/vectors.py`
 - Chunking, component scores, ranking, and `MatchResult.explanation`
 - Resume recommendation with user override
 - The `manual` job source, so the loop is exercisable end to end
+- Full frontend: onboarding form, resume upload, job intake with an
+  `Application deadline` field (a shadcn-style Ark UI date picker, retokenized
+  onto this project's design system), ranked-match results
+- The warm "studio" visual language (ADR 0006), icon set, light/dark toggle,
+  profile indicator, and card hover depth
 
 **Done when:** add 3 resumes → paste a JD → get a ranked recommendation with a readable
-explanation, in under 2 seconds.
+explanation, in under 2 seconds. **Verified live** through the actual UI, not just the
+test suite — see the M1 frontend and DatePicker integration commits.
 
-> `taxonomy.json` is the critical path. With no LLM, it *is* the semantic backbone of
-> skill matching, gap analysis, and filtering — matching quality is capped by it. Treat
-> it as a first-class deliverable with its own tests.
+> `taxonomy.json` is the critical path, and it has not caught up to its own target yet:
+> **89 entries seeded, not the ~600 originally scoped.** With no LLM, it *is* the
+> semantic backbone of skill matching, gap analysis, and filtering — matching quality
+> is capped by it today. Expanding it is worth doing before or alongside M2's job
+> intelligence work, since M2 will surface skill-matching gaps in a much wider variety
+> of real job descriptions than M1's own tests exercised.
 
 ## M2 — Job intelligence
 
