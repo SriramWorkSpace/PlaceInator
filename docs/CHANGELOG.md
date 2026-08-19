@@ -30,7 +30,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Frontend visual language rebuilt around a warm "studio" reference**,
   superseding the earlier GitHub-adjacent direction — self-hosted Fraunces
   display serif, cream palette, pill controls, per-section accent colors.
-  See [ADR 0006](./decisions/0006-studio-visual-language.md). Fixed a real
+  See [ADR 0006](./decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction). Fixed a real
   gap while touching the type system: Inter was previously only referenced
   by CSS name, never actually loaded, so it silently fell back to whatever
   the OS had installed.
@@ -59,7 +59,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   free.
 - **Alembic is now the sole owner of schema.** `create_all` was removed from the
   startup path; migrations run on every boot. See
-  [ADR 0004](./decisions/0004-alembic-sole-schema-owner.md).
+  [ADR 0004](./decisions.md#adr-0004--alembic-is-the-sole-owner-of-database-schema).
 - **Moved `feature_architecture.md` → `docs/specification.md`** (content unchanged).
 - `react-router-dom` upgraded to 7.x.
 

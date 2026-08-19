@@ -14,7 +14,7 @@ import { useTheme } from "@/lib/theme";
  * scrolling work area alongside the sidebar.
  *
  * Deliberately no separate top bar -- the reference this design follows
- * (docs/decisions/0006-studio-visual-language.md) keeps navigation chrome in
+ * (docs/decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction) keeps navigation chrome in
  * one sidebar column. The theme toggle is the one control that lives outside
  * that column, fixed to the page rather than the sidebar, so it stays put
  * regardless of collapse state or which route is open.

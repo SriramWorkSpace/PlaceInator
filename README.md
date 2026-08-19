@@ -104,4 +104,4 @@ in application code. After changing a model:
 Migrations run automatically on sidecar startup. `Base.metadata` carries a constraint
 naming convention because SQLite requires Alembic's batch mode for most alterations,
 and batch mode can only recreate constraints it can name — see
-[ADR 0004](docs/decisions/0004-alembic-sole-schema-owner.md).
+[ADR 0004](docs/decisions.md#adr-0004--alembic-is-the-sole-owner-of-database-schema).

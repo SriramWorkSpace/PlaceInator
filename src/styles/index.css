@@ -13,7 +13,7 @@
  *
  * This supersedes the flat, single-accent "GitHub-adjacent" direction
  * specification.md originally called for -- see
- * docs/decisions/0006-studio-visual-language.md for why, since
+ * docs/decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction for why, since
  * specification.md itself is the user's verbatim source of truth and is
  * never edited to match implementation.
  * ------------------------------------------------------------------ */

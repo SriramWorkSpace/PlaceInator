@@ -7,7 +7,7 @@ import { navItemForPath } from "@/lib/nav";
  * Standard page frame: a colored eyebrow naming the section, a serif display
  * title, an optional description, then content -- the recurring
  * "SECTION / Heading" pattern this design follows (see
- * docs/decisions/0006-studio-visual-language.md).
+ * docs/decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction).
  *
  * The eyebrow label and its color are derived from the current route via
  * navItemForPath, so every page gets a consistent one automatically instead

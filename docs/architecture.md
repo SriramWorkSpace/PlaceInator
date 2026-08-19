@@ -23,7 +23,7 @@ How PlaceInator is put together and why. The feature requirements live in
 ```
 
 Python owns SQLite outright — the Rust side never opens it. One writer, one schema,
-one migration path. See [ADR 0001](./decisions/0001-tauri-python-sidecar.md).
+one migration path. See [ADR 0001](./decisions.md#adr-0001--tauri-v2-shell-with-a-python-sidecar).
 
 ## Startup handshake
 
@@ -74,7 +74,7 @@ Flat feature packages, each mapping to a numbered specification section.
 | `placeinator/db/` | — | ORM models, session, enums, column types, migration runner |
 | `placeinator/profile/` | §1 | Onboarding, career preferences, employment constraints |
 | `placeinator/jobs/` | §2 | Normalization, hard filters, soft-preference scoring |
-| `placeinator/jobs/sources/` | §2 | Pluggable discovery adapters ([ADR 0003](./decisions/0003-job-source-boundary.md)) |
+| `placeinator/jobs/sources/` | §2 | Pluggable discovery adapters ([ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)) |
 | `placeinator/resumes/` | §3 | Resume library, parsing, section extraction, selection |
 | `placeinator/matching/` | — | The scoring engine and embedding encode/decode |
 | `placeinator/skills/` | — | Skill taxonomy and alias normalization |
@@ -89,7 +89,7 @@ Root modules: `app.py` (application factory), `main.py` (entry point and handsha
 ## The matching engine
 
 Everything else depends on this. Deterministic and explainable by construction — with
-no LLM there is no black box to hide behind ([ADR 0002](./decisions/0002-deterministic-no-llm.md)).
+no LLM there is no black box to hide behind ([ADR 0002](./decisions.md#adr-0002--deterministic-engine-no-llm-generation)).
 
 **Chunking.** Resumes become typed chunks (`ChunkKind`), each retaining its source span.
 Job descriptions become typed requirement lines (`RequirementKind`).
@@ -142,7 +142,7 @@ byte-for-byte across a corpus of real `.tex` files.
 SQLite in the per-user data directory (`Settings.data_dir`), WAL mode, foreign keys on.
 
 - **Alembic is the only thing that creates or alters schema** — see
-  [ADR 0004](./decisions/0004-alembic-sole-schema-owner.md).
+  [ADR 0004](./decisions.md#adr-0004--alembic-is-the-sole-owner-of-database-schema).
 - Enum columns go through `placeinator/db/types.py::enum_column`, never bare `String`,
   so they round-trip as real enum types and reject corrupt values loudly.
 - `Base.metadata` carries a constraint naming convention, because SQLite migrations run
@@ -153,7 +153,7 @@ SQLite in the per-user data directory (`Settings.data_dir`), WAL mode, foreign k
 A warm "studio" visual language — self-hosted Fraunces for display headings,
 Inter for UI text, cream canvas, fully-rounded pill controls, and a distinct
 muted accent color per section — superseding the original flat GitHub-adjacent
-brief. See [ADR 0006](./decisions/0006-studio-visual-language.md) for why, and
+brief. See [ADR 0006](./decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction) for why, and
 for the note that `specification.md`'s UI section (lines 767-807) is not kept
 in sync with this. Design tokens live in `src/styles/index.css` and handle
 light, dark, and system themes.

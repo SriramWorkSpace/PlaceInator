@@ -9,7 +9,7 @@ backoff, and response caching.
 
 **Hard boundary.** When an adapter meets a login wall, CAPTCHA, or bot-detection
 challenge it returns ``SourceBlocked`` and stops. It never solves, evades, or
-authenticates through one -- see docs/decisions/0003-job-source-boundary.md.
+authenticates through one -- see ADR 0003 in docs/decisions.md.
 ``SourceBlocked`` is a first-class UI state that offers manual paste, not an
 error.
 

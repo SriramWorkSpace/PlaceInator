@@ -33,7 +33,7 @@ def session() -> Iterator[Session]:
     Uses ``create_all`` rather than Alembic on purpose: this fixture tests the
     *models*, and going through migrations would make every schema test depend
     on migration correctness too. Application code must never do this -- see
-    docs/decisions/0004-alembic-sole-schema-owner.md.
+    docs/decisions.md#adr-0004--alembic-is-the-sole-owner-of-database-schema.
     """
     engine = sa.create_engine("sqlite://")
     Base.metadata.create_all(engine)

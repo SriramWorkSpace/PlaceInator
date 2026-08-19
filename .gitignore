@@ -25,11 +25,27 @@ src-tauri/target/
 src-tauri/binaries/
 
 # App data / secrets
+#
+# M4 adds Google OAuth for Gmail/Calendar (ADR 0001); the refresh token is
+# meant to live in the OS keychain, never a file, but these patterns are
+# covered now, before that lands, rather than added after a token file
+# almost gets committed once.
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 credentials.json
+client_secret*.json
+service-account*.json
 token.json
+*.token
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 
 # OS
 Thumbs.db
