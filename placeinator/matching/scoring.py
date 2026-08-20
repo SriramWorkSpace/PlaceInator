@@ -15,7 +15,7 @@ import numpy as np
 
 from placeinator.db.enums import ChunkKind, RequirementKind
 from placeinator.matching.chunking import RequirementLine, TextChunk
-from placeinator.matching.vectors import cosine_similarity_matrix, embed_texts
+from placeinator.matching.vectors import EMBEDDING_DIM, cosine_similarity_matrix, embed_texts
 
 # Tunable without a code change once config/scoring.toml lands in a later
 # milestone; centralized here in the meantime so nothing hardcodes a weight
@@ -176,43 +176,72 @@ def _score_role(resume_target_role: str | None, jd_title: str) -> ComponentScore
     return ComponentScore(value=_clamp_unit(similarity), weight=COMPONENT_WEIGHTS["role"])
 
 
+def _rows_at(vectors: np.ndarray, indices: list[int]) -> np.ndarray:
+    if not indices:
+        return np.zeros((0, EMBEDDING_DIM), dtype=np.float32)
+    return vectors[indices]
+
+
 def score_match(
     *,
     resume_chunks: list[TextChunk],
     requirements: list[RequirementLine],
     resume_target_role: str | None,
     jd_title: str,
+    resume_vectors: np.ndarray | None = None,
+    requirement_vectors: np.ndarray | None = None,
 ) -> MatchExplanation:
     """Score one resume against one job description.
 
-    Embeds every chunk and requirement exactly once, then reuses those vectors
-    across all five components -- the expensive part is the embedding calls,
-    not the similarity math.
+    Embedding is the expensive part; the similarity math is not. Two things
+    keep it to a minimum:
+
+    * ``resume_vectors`` / ``requirement_vectors`` may be supplied by the
+      caller -- ``placeinator.matching.service`` passes the vectors already
+      persisted on ``ResumeChunk.embedding`` / ``JobRequirement.embedding``,
+      so ranking a whole job corpus embeds nothing at all. Omit them and this
+      function embeds the text itself, so it stays usable on its own.
+    * The project/experience/responsibility subsets are *indexed out* of those
+      arrays rather than embedded again. Embedding is deterministic for the
+      same text and model, so re-embedding a subset produced identical numbers
+      at triple the cost.
     """
-    resume_texts = [c.text for c in resume_chunks]
-    requirement_texts = [r.text for r in requirements]
+    if resume_vectors is None:
+        resume_vectors = embed_texts([c.text for c in resume_chunks])
+    if requirement_vectors is None:
+        requirement_vectors = embed_texts([r.text for r in requirements])
 
-    resume_vectors = embed_texts(resume_texts)
-    requirement_vectors = embed_texts(requirement_texts)
+    if len(resume_vectors) != len(resume_chunks) or len(requirement_vectors) != len(requirements):
+        raise ValueError(
+            "supplied vectors must align 1:1 with their chunks/requirements "
+            f"(got {len(resume_vectors)}/{len(resume_chunks)} resume, "
+            f"{len(requirement_vectors)}/{len(requirements)} requirement)"
+        )
 
-    project_bullets = [c for c in resume_chunks if c.kind == ChunkKind.PROJECT_BULLET]
-    project_vectors = embed_texts([c.text for c in project_bullets])
+    project_idx = [i for i, c in enumerate(resume_chunks) if c.kind == ChunkKind.PROJECT_BULLET]
+    experience_idx = [
+        i for i, c in enumerate(resume_chunks) if c.kind == ChunkKind.EXPERIENCE_BULLET
+    ]
+    responsibility_idx = [
+        i for i, r in enumerate(requirements) if r.kind == RequirementKind.RESPONSIBILITY
+    ]
 
-    experience_bullets = [c for c in resume_chunks if c.kind == ChunkKind.EXPERIENCE_BULLET]
-    experience_vectors = embed_texts([c.text for c in experience_bullets])
-
-    responsibilities = [r for r in requirements if r.kind == RequirementKind.RESPONSIBILITY]
-    responsibility_vectors = embed_texts([r.text for r in responsibilities])
+    responsibilities = [requirements[i] for i in responsibility_idx]
+    responsibility_vectors = _rows_at(requirement_vectors, responsibility_idx)
 
     components = {
         "overall": _score_overall(resume_vectors, requirement_vectors),
         "skills": _score_skills(resume_chunks, requirements),
         "projects": _score_bullets_against_requirements(
-            project_bullets, project_vectors, responsibilities, responsibility_vectors,
+            [resume_chunks[i] for i in project_idx],
+            _rows_at(resume_vectors, project_idx),
+            responsibilities, responsibility_vectors,
             COMPONENT_WEIGHTS["projects"],
         ),
         "experience": _score_bullets_against_requirements(
-            experience_bullets, experience_vectors, responsibilities, responsibility_vectors,
+            [resume_chunks[i] for i in experience_idx],
+            _rows_at(resume_vectors, experience_idx),
+            responsibilities, responsibility_vectors,
             COMPONENT_WEIGHTS["experience"],
         ),
         "role": _score_role(resume_target_role, jd_title),

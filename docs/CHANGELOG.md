@@ -7,6 +7,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Ranking now reuses `MatchResult` rows instead of rescoring the corpus.**
+  `rank_jobs` runs on every Dashboard mount and called `match_resume_to_job`
+  per job, each of which re-embedded every chunk and requirement — the
+  `MatchResult` rows were written but never read back. A stored result is now
+  returned untouched while it is fresh (same `scoring_version`; neither job nor
+  resume written since), and only a real change invalidates it. **25 jobs:
+  2.1 s → 8 ms, with identical scores.**
+  - When a rescore *is* needed it reuses the embeddings already persisted on
+    `ResumeChunk.embedding` / `JobRequirement.embedding` — the provenance stamps
+    exist for exactly this, and a model change falls back to re-embedding.
+  - `score_match` now derives its project/experience/responsibility subsets by
+    indexing into the full vector arrays rather than embedding those texts a
+    second time. Embedding is deterministic, so the old path paid triple for
+    identical numbers.
+  - The refresh is an explicit timestamp touch, not `onupdate`, which only fires
+    when a value actually changes — a rescore that produced identical scores
+    would otherwise leave the row looking stale forever and rescore on every
+    mount.
+- **Node 22 is now the project's baseline** (`engines`, `.nvmrc`, README), matching
+  CI. Node 20 is end-of-life, and leaving CI on 22 while the local requirement
+  said 20+ was a fresh version skew of exactly the kind this milestone removed
+  elsewhere.
+
 ### Added
 
 - **ATS board sync is reachable from the UI at last.** `POST /api/jobs/ats-feed`

@@ -112,6 +112,27 @@ capturing each component's value, weight, and top contributing chunk pairs. That
 record drives notification reasons (spec line 143), resume recommendation (line 210),
 and the tailoring change log (lines 349-377).
 
+**That same record is the ranking cache** — it is read back, not only written.
+`rank_jobs` runs over the whole corpus on every Dashboard mount, so
+`match_resume_to_job` returns a stored `MatchResult` untouched when it is still
+fresh: same `scoring_version`, and neither the job nor the resume written since
+the score was taken. Only a real change invalidates it; SQLAlchemy issues no
+UPDATE when an assignment doesn't alter a value, so re-filtering against
+unchanged preferences leaves the cache intact.
+
+When a rescore *is* needed it reuses the vectors already on
+`ResumeChunk.embedding` / `JobRequirement.embedding` rather than re-embedding
+their text, and derives the project/experience/responsibility subsets by
+indexing into those arrays — embedding is deterministic, so re-embedding a
+subset produced identical numbers at triple the cost. Measured over 25 jobs:
+2.1 s cold, 8 ms warm, scores identical.
+
+Freshness compares timestamps, and `TimestampMixin` fills them from two places —
+a SQL `server_default` on insert, a Python `onupdate` on update — so a row
+written in the current session is tz-aware in memory while one loaded from
+SQLite is naive. They are normalized before comparison; comparing them directly
+raises `TypeError`.
+
 **Embedding contract.** float32 little-endian, C-contiguous, L2-normalized, written
 only through `placeinator/matching/vectors.py`, and always stamped with
 `embedding_model` and `embedding_dim` so a model change leaves stale rows detectable

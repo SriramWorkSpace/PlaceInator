@@ -85,7 +85,7 @@ logs everything else to stderr, so that channel never carries anything but the h
 | Tool | Version | Required for |
 |---|---|---|
 | Python | 3.12+ (developed on 3.13) | sidecar |
-| Node.js | 20+ | frontend |
+| Node.js | 22+ (`.nvmrc` pins 22; Node 20 is end-of-life) | frontend |
 | Rust + MSVC build tools | stable | Tauri shell — **not yet installed** |
 | MiKTeX or TeX Live | any | optional PDF compile only |
 | Tesseract OCR | any | optional scanned-document support only |
@@ -96,10 +96,15 @@ and degrade with an explanation rather than erroring.
 ## Setup
 
 ```bash
+nvm use            # reads .nvmrc — Node 22
 python -m venv .venv
 .venv/Scripts/python.exe -m pip install -e ".[dev]"
 npm install
 ```
+
+CI pins both runtimes to exact versions (Python 3.13.7, Node 22). Matching them
+locally is worth the minute it costs: a floating version is how a `robots.txt`
+bug once passed on a dev machine and failed only in CI.
 
 ## Running
 
