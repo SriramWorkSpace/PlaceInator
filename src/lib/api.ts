@@ -7,6 +7,8 @@
  */
 
 import type {
+  AtsFeedIn,
+  AtsFeedOut,
   ExtractedJobFields,
   ExtractedProfileFields,
   JdSourceFormat,
@@ -162,6 +164,13 @@ export const listJobs = () => apiFetch<JobOut[]>("/api/jobs");
  * manual paste, not surface a failure. */
 export const searchJobs = (data: JobSearchIn) =>
   apiFetch<JobSearchOut>("/api/jobs/search", { method: "POST", body: JSON.stringify(data) });
+
+/** Pulls every open posting from a company's public ATS board (Greenhouse,
+ * Lever, Ashby). Unlike `searchJobs` this is company-scoped, not keyword
+ * search -- each entry is "platform:company-slug". These are official public
+ * APIs, so unlike the scraped boards they reliably return full descriptions. */
+export const syncAtsFeed = (data: AtsFeedIn) =>
+  apiFetch<AtsFeedOut>("/api/jobs/ats-feed", { method: "POST", body: JSON.stringify(data) });
 
 /** Best-first, hard-filtered jobs kept (never hidden) but sorted last with
  * their reason attached. Requires onboarding -- ranking is meaningless

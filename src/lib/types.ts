@@ -116,6 +116,20 @@ export interface JobSearchOut {
   blocked_reason: string | null;
 }
 
+/** The ATS platforms whose public board APIs `ats_feed` can read. */
+export const ATS_PLATFORMS = ["greenhouse", "lever", "ashby"] as const;
+export type AtsPlatform = (typeof ATS_PLATFORMS)[number];
+
+export interface AtsFeedIn {
+  /** Entries are "platform:company-slug", e.g. "greenhouse:stripe". */
+  companies: string[];
+}
+
+export interface AtsFeedOut {
+  jobs: JobOut[];
+  blocked_reason: string | null;
+}
+
 /** Best-effort autofill preview parsed from an uploaded JD file -- designation
  * and company are frequently null (a JD's layout is far less standardized
  * than a resume's), but description is always the full parsed text. */
@@ -131,6 +145,9 @@ export interface JobOut {
   company: string;
   designation: string;
   location: string | null;
+  /** The real posting URL when an adapter found one (always null for manual
+   * entries unless the user supplied it). */
+  url: string | null;
   deadline: string | null;
   required_skill_ids: string[];
   preferred_skill_ids: string[];

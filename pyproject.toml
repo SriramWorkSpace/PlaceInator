@@ -71,7 +71,12 @@ markers = [
     "live: hits real external services (opt-in, deselected by default)",
     "model: downloads/runs the real embedding model, ~35s first run (opt-in, deselected by default)",
 ]
+# `model` is deselected by default to keep the local edit loop fast, but CI
+# runs it as a required second step -- it is opt-in, not optional.
 addopts = "-m 'not live and not model'"
+# pytest-asyncio's default is already strict, but declaring it means a version
+# bump can't silently change how the async integration tests are collected.
+asyncio_mode = "strict"
 
 [tool.mypy]
 python_version = "3.12"

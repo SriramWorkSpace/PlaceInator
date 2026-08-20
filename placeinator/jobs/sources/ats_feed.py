@@ -22,6 +22,8 @@ from __future__ import annotations
 import html
 from typing import Any, Literal
 
+import httpx
+
 from placeinator.db.enums import SourceKind, WorkMode
 from placeinator.jobs.sources.base import (
     JobSource,
@@ -36,6 +38,19 @@ from placeinator.jobs.sources.base import (
 AtsPlatform = Literal["greenhouse", "lever", "ashby"]
 
 _RATE_LIMIT_SECONDS = 1.0  # matches Lever's own stated Crawl-delay: 1
+
+
+def _decode_json(response: httpx.Response) -> Any:
+    """``None`` when the body isn't JSON at all.
+
+    A 200 carrying an edge-server error page or a changed contract must read
+    as ``SourceBlocked`` (ADR 0003's "offer manual paste"), not raise out of
+    ``fetch`` as a 500 the UI renders as an error.
+    """
+    try:
+        return response.json()
+    except ValueError:
+        return None
 
 
 class AtsFeedSource(JobSource):
@@ -85,15 +100,24 @@ class AtsFeedSource(JobSource):
         if response.status_code != 200:
             return SourceBlocked(f"greenhouse returned {response.status_code} for {company_slug}")
 
+        payload = _decode_json(response)
+        if not isinstance(payload, dict):
+            return SourceBlocked(f"greenhouse returned an unreadable body for {company_slug}")
+
         postings = []
-        jobs = response.json().get("jobs", [])[: self._max_postings_per_company]
+        jobs = (payload.get("jobs") or [])[: self._max_postings_per_company]
         for job in jobs:
-            detail_url = f"{list_url}/{job['id']}"
+            # source_ref is the upsert key, so a posting without an id would
+            # re-insert on every rescan instead of updating. Skip it.
+            job_id = job.get("id")
+            if job_id is None:
+                continue
+            detail_url = f"{list_url}/{job_id}"
             description = self._fetch_greenhouse_description(detail_url)
 
             postings.append(
                 RawPosting(
-                    source_ref=f"greenhouse:{company_slug}:{job['id']}",
+                    source_ref=f"greenhouse:{company_slug}:{job_id}",
                     company=job.get("company_name") or company_slug,
                     designation=(job.get("title") or "").strip(),
                     description=description,
@@ -114,8 +138,10 @@ class AtsFeedSource(JobSource):
         # Greenhouse double-escapes: the JSON string value is itself
         # HTML-entity-encoded HTML (verified live -- "content" holds literal
         # "&lt;p&gt;" text, not raw "<p>").
-        content = response.json().get("content", "")
-        return html_to_text(html.unescape(content))
+        payload = _decode_json(response)
+        if not isinstance(payload, dict):
+            return ""
+        return html_to_text(html.unescape(payload.get("content") or ""))
 
     # -- Lever ------------------------------------------------------------ #
 
@@ -127,14 +153,21 @@ class AtsFeedSource(JobSource):
         if response.status_code != 200:
             return SourceBlocked(f"lever returned {response.status_code} for {company_slug}")
 
+        payload = _decode_json(response)
+        # Lever's postings endpoint returns a bare array, not an object.
+        if not isinstance(payload, list):
+            return SourceBlocked(f"lever returned an unreadable body for {company_slug}")
+
         postings = []
-        postings_data = response.json()[: self._max_postings_per_company]
-        for job in postings_data:
+        for job in payload[: self._max_postings_per_company]:
+            job_id = job.get("id")
+            if job_id is None:
+                continue
             categories = job.get("categories") or {}
             description = job.get("descriptionPlain") or html_to_text(job.get("description") or "")
             postings.append(
                 RawPosting(
-                    source_ref=f"lever:{company_slug}:{job['id']}",
+                    source_ref=f"lever:{company_slug}:{job_id}",
                     company=company_slug,
                     designation=(job.get("text") or "").strip(),
                     description=description,
@@ -156,12 +189,19 @@ class AtsFeedSource(JobSource):
         if response.status_code != 200:
             return SourceBlocked(f"ashby returned {response.status_code} for {company_slug}")
 
+        payload = _decode_json(response)
+        if not isinstance(payload, dict):
+            return SourceBlocked(f"ashby returned an unreadable body for {company_slug}")
+
         postings = []
-        jobs = response.json().get("jobs", [])[: self._max_postings_per_company]
+        jobs = (payload.get("jobs") or [])[: self._max_postings_per_company]
         for job in jobs:
+            job_id = job.get("id")
+            if job_id is None:
+                continue
             postings.append(
                 RawPosting(
-                    source_ref=f"ashby:{company_slug}:{job['id']}",
+                    source_ref=f"ashby:{company_slug}:{job_id}",
                     company=company_slug,
                     designation=(job.get("title") or "").strip(),
                     description=html_to_text(job.get("descriptionHtml") or ""),

@@ -77,14 +77,27 @@ was written, not assumed from the spec's own expectations:
   gets through — deliberately not adopted, since disguising the UA to evade
   detection is exactly what ADR 0003 rules out.
 
-Found and fixed a real bug in shared infrastructure while verifying indeed:
-`RobotFileParser.can_fetch` resolves rules by first-match-in-file-order, not
-RFC 9309's longest-match-wins, so a host whose `User-agent: *` block opens
-with a blanket `Allow: /` before later specific `Disallow:` lines (Indeed's
-shape, exactly) was being read as more permissive than the file's own author
-intended. Replaced with a longest-match implementation
-(`placeinator/jobs/sources/base.py::_can_fetch`) that every adapter now goes
-through.
+Found and fixed **two** real bugs in shared infrastructure while verifying
+indeed — the second one caused by the fix for the first, so both are recorded
+here rather than only the tidy version:
+
+1. `RobotFileParser.can_fetch` resolves rules by first-match-in-file-order, not
+   RFC 9309's longest-match-wins, so a host whose `User-agent: *` block opens
+   with a blanket `Allow: /` before later specific `Disallow:` lines (Indeed's
+   shape, exactly) was read as more permissive than the file's own author
+   intended.
+2. The first fix kept `RobotFileParser` for parsing and only replaced its
+   decision logic, reading the parsed result off `entries`, `default_entry`,
+   `RuleLine.path`, and `.allowance` — **undocumented private attributes with
+   no stability guarantee.** They behave differently across Python patch
+   releases, so every disallow rule silently evaluated to "allowed" on CI
+   (3.13.15) while passing locally (3.13.7).
+
+The shipped implementation parses `robots.txt` from raw text itself
+(`placeinator/jobs/sources/base.py::_parse_robots_groups` / `_can_fetch`), with
+no dependency on `urllib.robotparser` at all, and is regression-tested against
+the real captured Indeed `robots.txt`. Every adapter goes through it. CI now
+pins an exact Python patch version so this class of skew can't hide again.
 
 Also shipped: shared adapter infrastructure; hard-constraint filtering and
 soft-preference scoring (`placeinator/jobs/filtering.py`, `rank_jobs` in
@@ -94,6 +107,15 @@ search form, with filter explanations; personalized notifications
 surfaced on the Dashboard. `Job.filtered_out_reason` is recomputed on every
 job create and on every preference save (`refilter_jobs`), so it never goes
 stale.
+
+A consolidation pass then closed the gap between "the backend works" and "a user
+can reach it": the ATS-feed sync had been complete and tested since M2's first
+slice but had no UI at all, and `JobOut` omitted `url`, so every discovered
+posting was a dead end. Both are fixed, transport failures now degrade to
+`SourceBlocked` instead of a 500, and the search route — the only discovery path
+wired to a control — finally has tests. The `model`-marked suite, including M1's
+end-to-end acceptance path, is a required CI gate rather than a deselected
+afterthought.
 
 - Source adapters in expected-success order: `indeed`, `ats_feed`, `linkedin`, `naukri`
   (see [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)) —

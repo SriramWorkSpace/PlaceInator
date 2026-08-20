@@ -7,7 +7,76 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **ATS board sync is reachable from the UI at last.** `POST /api/jobs/ats-feed`
+  had been complete and tested on the backend since M2's first slice but had no
+  client function, no wire type, and no control — meaning Greenhouse/Lever/Ashby,
+  the only adapter that reliably returns full job descriptions, was dead weight
+  in the shipped app. Added `syncAtsFeed` (`src/lib/api.ts`), the `AtsFeedIn`/
+  `AtsFeedOut`/`AtsPlatform` types, and an `AtsFeedSync` control on the Jobs page.
+- **Discovered jobs link back to the original posting.** `JobOut` never carried
+  `url`, so a posting an adapter found was a dead end in the UI even though the
+  URL had been persisted all along. Job rows now also show which source they came
+  from, so a discovered posting is distinguishable from a pasted one.
+
 ### Fixed
+
+- **A transport failure in any job source is now `SourceBlocked`, not a 500.**
+  No adapter caught `httpx.HTTPError`, so a connect timeout or DNS failure
+  propagated out of `fetch()` and reached the UI as an error — precisely the
+  outcome [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)
+  exists to prevent. Caught at `JobSource.get`, the single choke point all four
+  adapters share.
+- **`ats_feed` no longer crashes on an unreadable response.** `response.json()`
+  and `job["id"]` were unguarded, so a 200 carrying an error page, or a posting
+  without an id, raised instead of degrading to `SourceBlocked`.
+- **`search_jobs` raised a bare `KeyError`** (an opaque 500) for `manual` and
+  `ats_feed`, neither of which is keyword-searchable. Now a `ValueError` naming
+  the sources that are.
+- **The notification list went stale after adding or discovering a job.** The
+  Jobs page invalidated only `["jobs", "ranked"]`, so a new job that cleared the
+  threshold wouldn't reach the Dashboard until an unrelated refetch.
+- **20+ tests never ran in CI.** The `model`-marked suite — `test_m1_flow.py`
+  (the M1 end-to-end acceptance path), `test_ats_feed_api.py`, and the new
+  search-API tests — was deselected by the default run, and the one `model` step
+  CI did have was scoped to `test_scoring.py` *and* marked `continue-on-error`.
+  It is now a required gate. The embedding model downloads once per run, not once
+  per test (`fastembed`'s loader is `lru_cache`d).
+- **CI's Python version is pinned to an exact patch** (`3.13.7`) instead of a
+  floating `3.13`. The floating version is how the robots.txt bug below passed
+  locally and failed in CI.
+- **`actions/checkout`, `setup-node`, and `setup-python` bumped v4/v4/v5 → v7**,
+  clearing the Node 20 deprecation warnings on every run.
+- **`POST /api/jobs/search` and `service.search_jobs` had no test at all** —
+  the only discovery path wired to a UI control was the one path with zero
+  coverage. Added `tests/unit/test_jobs_search.py` (dispatch, blocked
+  passthrough, adapter lifetime, unsearchable-source guard) and
+  `tests/integration/test_jobs_search_api.py` (route → service → upsert →
+  serialization, against the real captured Indeed fixture).
+
+### Documentation
+
+Four claims in the codebase were checked against the code and found false:
+
+- `placeinator/jobs/__init__.py` advertised an entry point `normalize_posting`
+  that has never existed (it is `upsert_job_from_posting`).
+- `placeinator/jobs/sources/__init__.py` claimed token-bucket rate limiting,
+  exponential backoff, and response caching. None exist; `base.py` is a plain
+  minimum-interval limiter and says so. It also claimed every adapter ships
+  fixtures — only `ats_feed` and `indeed` do, because they are the only two with
+  a parser.
+- `placeinator/api/jobs.py` said "only manual paste exists here" while
+  containing `/ats-feed` and `/search`.
+- `docs/roadmap.md` still credited the intermediate `RobotFileParser`-internals
+  fix — the one that *caused* the CI break — and `docs/decisions.md` still listed
+  `urllib.robotparser` as shipped infrastructure, contradicting its own addendum.
+  Both now record what was actually built, including what was planned and
+  dropped.
+
+Also corrected: `read_notifications` attributed the threshold to the module-level
+`NOTIFICATION_THRESHOLD`, which is only the fallback when no preferences row
+exists — the user's own `Preferences.notification_threshold` is what applies.
 
 - **CI was broken on `windows-latest` (Python 3.13.15) while passing locally
   (Python 3.13.7)** — `placeinator/jobs/sources/base.py::_can_fetch`'s

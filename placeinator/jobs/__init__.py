@@ -13,5 +13,5 @@ preferences in two distinct passes:
 Discovery adapters live in :mod:`placeinator.jobs.sources`. Ranking combines the
 semantic score from :mod:`placeinator.matching` with these preference signals.
 
-Entry points: ``normalize_posting``, ``apply_hard_filters``, ``rank_jobs``.
+Entry points: ``upsert_job_from_posting``, ``apply_hard_filters``, ``rank_jobs``.
 """

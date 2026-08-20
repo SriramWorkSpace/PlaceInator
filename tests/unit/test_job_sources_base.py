@@ -14,7 +14,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from placeinator.jobs.sources.base import _can_fetch, _parse_robots_groups
+import httpx
+import pytest
+
+from placeinator.db.enums import SourceKind
+from placeinator.jobs.sources.base import (
+    FetchResult,
+    JobSource,
+    SearchQuery,
+    SourceBlocked,
+    _can_fetch,
+    _parse_robots_groups,
+)
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PlaceInatorBot/0.1"
 FIXTURES = Path(__file__).parents[1] / "fixtures" / "indeed"
@@ -77,3 +88,55 @@ def test_real_indeed_robots_txt_matches_live_verified_behavior():
     detail_url = "https://www.indeed.com/viewjob?jk=7900206b8b835535"
     assert _can_fetch(groups, real_ua, search_url) is True
     assert _can_fetch(groups, real_ua, detail_url) is False
+
+
+# -- JobSource.get transport failures ------------------------------------- #
+
+
+class _PlainSource(JobSource):
+    source = SourceKind.INDEED
+
+    def fetch(self, query: SearchQuery) -> FetchResult:  # pragma: no cover - unused
+        raise NotImplementedError
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        httpx.ConnectTimeout("timed out"),
+        httpx.ReadTimeout("timed out"),
+        httpx.ConnectError("name or service not known"),
+    ],
+)
+def test_a_transport_failure_is_source_blocked_not_an_exception(error: httpx.HTTPError):
+    """No network, a DNS failure, or a dropped connection is the source being
+    unreachable -- ADR 0003 answers that with "offer manual paste", so it must
+    not escape fetch() and become a 500 the UI renders as an error."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        raise error
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with _PlainSource(client=client) as source:
+        result = source.get("https://example.com/jobs?q=backend")
+
+    assert isinstance(result, SourceBlocked)
+    assert "example.com" in result.reason
+
+
+def test_a_successful_request_still_returns_the_response():
+    """The guard above must not swallow the normal path."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(200, text="ok")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with _PlainSource(client=client) as source:
+        result = source.get("https://example.com/jobs?q=backend")
+
+    assert isinstance(result, httpx.Response)
+    assert result.text == "ok"

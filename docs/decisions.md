@@ -170,11 +170,18 @@ what is reachable without defeating an access control**.
 `JobSource.fetch(query) -> FetchResult`, where `FetchResult` is either postings or
 `SourceBlocked(reason)`.
 
-Shared infrastructure in `placeinator/jobs/sources/base.py`:
+Shared infrastructure in `placeinator/jobs/sources/base.py` — as originally
+planned, then as actually built:
 
-- `robots.txt` checking via `urllib.robotparser`
-- per-source token-bucket rate limiting and exponential backoff
-- response caching keyed by URL
+| Planned | Shipped |
+|---|---|
+| `robots.txt` checking via `urllib.robotparser` | A self-contained RFC 9309 parser. `urllib.robotparser` was tried and abandoned — see "Verified in practice" below |
+| per-source token-bucket rate limiting and exponential backoff | A per-host minimum-interval limiter. No token bucket, no backoff — neither has been needed at one user's request volume |
+| response caching keyed by URL | Not built. Only `robots.txt` responses are cached, per origin |
+
+One choke point, `JobSource.get`, turns a robots.txt disallow *and* a transport
+failure (timeout, DNS, dropped connection) into `SourceBlocked`, so no adapter
+can accidentally surface an unreachable source as an error.
 
 **When an adapter meets a login wall, CAPTCHA, or bot-detection challenge, it returns
 `SourceBlocked` and stops.** It does not solve, evade, or authenticate through it.

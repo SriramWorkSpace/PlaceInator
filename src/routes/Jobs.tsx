@@ -13,10 +13,13 @@ import {
   NotOnboardedError,
   rankResumesForJob,
   searchJobs,
+  syncAtsFeed,
 } from "@/lib/api";
 import {
+  ATS_PLATFORMS,
   JD_SOURCE_FORMATS,
   JOB_SEARCH_SOURCES,
+  type AtsPlatform,
   type JdSourceFormat,
   type JobRanking,
   type JobSearchSource,
@@ -68,6 +71,105 @@ async function loadJobs(): Promise<{ rankings: JobRanking[]; ranked: boolean }> 
   }
 }
 
+/** A job that was just added or discovered can also clear the notification
+ * threshold, so both the ranked list and the Dashboard's notifications have to
+ * be refetched. The `["jobs"]` prefix covers both; invalidating only
+ * `["jobs", "ranked"]` left the Dashboard stale until an unrelated refetch. */
+function invalidateJobLists(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ["jobs"] });
+}
+
+/**
+ * Pulls every open posting from a company's public ATS board.
+ *
+ * Kept separate from the keyword search above because it is a different kind
+ * of query: company-scoped, not free-text. It is also the only source that
+ * reliably returns full job descriptions -- these are official public APIs
+ * rather than scraped HTML -- so it is worth its own control rather than
+ * being hidden behind the job-board dropdown.
+ */
+function AtsFeedSync() {
+  const queryClient = useQueryClient();
+  const [platform, setPlatform] = useState<AtsPlatform>("greenhouse");
+  const [slug, setSlug] = useState("");
+
+  const sync = useMutation({
+    mutationFn: syncAtsFeed,
+    onSuccess: () => {
+      invalidateJobLists(queryClient);
+      setSlug("");
+    },
+  });
+
+  return (
+    <div
+      className="card mt-6 rounded-[var(--radius-panel)] border p-6"
+      style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+    >
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          sync.mutate({ companies: [`${platform}:${slug.trim()}`] });
+        }}
+      >
+        <div className="w-36">
+          <Field label="ATS platform">
+            <Select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value as AtsPlatform)}
+            >
+              {ATS_PLATFORMS.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <div className="min-w-48 flex-1">
+          <Field label="Company board">
+            <TextInput
+              required
+              placeholder="stripe"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button type="submit" disabled={sync.isPending}>
+          {sync.isPending ? "Syncing…" : "Sync board"}
+        </Button>
+      </form>
+
+      <p className="mt-3 text-xs" style={{ color: "var(--fg-subtle)" }}>
+        The company's slug as it appears in their careers URL — e.g.{" "}
+        <code>boards.greenhouse.io/<b>stripe</b></code>. Pulls every open posting, with full
+        descriptions.
+      </p>
+
+      {sync.isError && (
+        <div className="mt-3">
+          <ErrorText onDismiss={() => sync.reset()}>{(sync.error as Error).message}</ErrorText>
+        </div>
+      )}
+
+      {sync.isSuccess && sync.data.blocked_reason && (
+        <p className="mt-3 text-xs" style={{ color: "var(--fg-subtle)" }}>
+          That board couldn't be reached ({sync.data.blocked_reason}). Check the slug, or paste
+          the job description below instead.
+        </p>
+      )}
+
+      {sync.isSuccess && !sync.data.blocked_reason && (
+        <p className="mt-3 text-xs" style={{ color: "var(--fg-subtle)" }}>
+          Synced {sync.data.jobs.length} job{sync.data.jobs.length === 1 ? "" : "s"}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /**
  * Keyword/location search against indeed/linkedin/naukri (ADR 0003).
  * `blocked_reason` is a first-class, expected outcome -- not an error -- for
@@ -84,7 +186,7 @@ function JobBoardSearch() {
     mutationFn: searchJobs,
     onSuccess: (result) => {
       if (result.jobs.length > 0) {
-        queryClient.invalidateQueries({ queryKey: ["jobs", "ranked"] });
+        invalidateJobLists(queryClient);
       }
     },
   });
@@ -187,7 +289,7 @@ export function Jobs() {
   const addJob = useMutation({
     mutationFn: createManualJob,
     onSuccess: (job) => {
-      queryClient.invalidateQueries({ queryKey: ["jobs", "ranked"] });
+      invalidateJobLists(queryClient);
       setForm(EMPTY_JOB);
       extractJd.reset();
       if (jdFileInput.current) jdFileInput.current.value = "";
@@ -201,6 +303,7 @@ export function Jobs() {
       description="Search a job board, paste a job description, or upload a JD file, to match it against your resume library (spec §2)."
     >
       <JobBoardSearch />
+      <AtsFeedSync />
 
       <form
         className="card mt-6 space-y-3 rounded-[var(--radius-panel)] border p-6"
@@ -344,7 +447,7 @@ export function Jobs() {
         ) : !jobs || jobs.length === 0 ? (
           <EmptyState
             title="No jobs yet"
-            hint="Paste a job description above to add one manually. Automatic discovery from job boards arrives in M2."
+            hint="Search a job board, sync a company's ATS board, or paste a job description above. Sources that block automated access will say so and fall back to manual paste."
           />
         ) : (
           <ul className="space-y-3">
@@ -401,6 +504,14 @@ function JobRow({
             {job.location ? ` · ${job.location}` : ""}
             {job.deadline ? ` · Due ${formatDeadline(job.deadline)}` : ""}
           </span>
+          {/* Where this came from: a discovered posting and one the user
+              pasted are otherwise indistinguishable in this list. */}
+          <span
+            className="ml-2 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+            style={{ background: "var(--canvas)", color: "var(--fg-subtle)" }}
+          >
+            {job.source.replace("_", " ")}
+          </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {showScore && !filtered && (
@@ -416,6 +527,22 @@ function JobRow({
           </span>
         </span>
       </button>
+
+      {/* Outside the toggle button on purpose -- an <a> nested inside a
+          <button> is invalid HTML and swallows the click. */}
+      {job.url && (
+        <p className="px-4 pb-3">
+          <a
+            href={job.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-xs underline underline-offset-2"
+            style={{ color: "var(--accent)" }}
+          >
+            View original posting ↗
+          </a>
+        </p>
+      )}
 
       {filtered && (
         <p className="px-4 pb-3 text-xs" style={{ color: "var(--danger)" }}>

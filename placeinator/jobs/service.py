@@ -269,8 +269,17 @@ def search_jobs(
     """Keyword/location search against indeed/linkedin/naukri (ADR 0003).
     ``SourceBlocked`` is the expected, common outcome for linkedin/naukri --
     see their adapters' module docstrings for why -- and is never treated as
-    an error here, only reported."""
-    adapter_cls = _SEARCH_SOURCES[source]
+    an error here, only reported.
+
+    Raises ``ValueError`` for a source that isn't keyword-searchable (``manual``
+    has no remote to search; ``ats_feed`` is company-scoped, so it goes through
+    ``sync_ats_feed``). The API layer's ``Literal`` already rejects those, but
+    this function is called directly by tests and future callers too.
+    """
+    adapter_cls = _SEARCH_SOURCES.get(source)
+    if adapter_cls is None:
+        searchable = ", ".join(sorted(s.value for s in _SEARCH_SOURCES))
+        raise ValueError(f"{source.value} is not keyword-searchable; expected one of {searchable}")
     with adapter_cls() as adapter:
         result = adapter.fetch(query)
 

@@ -1,6 +1,9 @@
-"""Job intake endpoints. Adapter-based discovery (Indeed, ATS feeds, ...) lands
-in M2; only manual paste exists here -- see ADR 0003 on why manual is never
-optional regardless of what else ships."""
+"""Job intake endpoints: manual paste, JD file upload, ATS-feed sync, and
+keyword search against the job-board adapters.
+
+Manual paste stays first-class alongside all of them -- see ADR 0003 on why it
+is never optional regardless of what else ships, and why a blocked source
+returns a reason to show rather than an error to raise."""
 
 from __future__ import annotations
 
@@ -61,6 +64,9 @@ class JobOut(BaseModel):
     company: str
     designation: str
     location: str | None
+    # Without this a discovered posting is a dead end: adapters persist the
+    # real posting URL, so the UI must be able to link back out to it.
+    url: str | None
     deadline: date | None
     required_skill_ids: list[str]
     preferred_skill_ids: list[str]
@@ -78,6 +84,7 @@ def _to_out(job: Job) -> JobOut:
         company=job.company,
         designation=job.designation,
         location=job.location,
+        url=job.url,
         deadline=job.deadline,
         required_skill_ids=job.required_skill_ids,
         preferred_skill_ids=job.preferred_skill_ids,
@@ -130,8 +137,10 @@ def read_ranked_jobs(session: Session = Depends(get_session)) -> list[JobRanking
 @router.get("/notifications", response_model=list[JobRankingOut])
 def read_notifications(session: Session = Depends(get_session)) -> list[JobRankingOut]:
     """Jobs worth interrupting the user for (spec §2's Personalized Job
-    Notifications): passes hard filters, scores above NOTIFICATION_THRESHOLD,
-    and hasn't been marked seen yet."""
+    Notifications): passes hard filters, scores at or above the user's own
+    ``Preferences.notification_threshold`` (the module-level
+    ``NOTIFICATION_THRESHOLD`` is only the fallback when no preferences row
+    exists yet), and hasn't been marked seen."""
     profile = _require_profile(session)
     return [_to_ranking_out(r) for r in list_notifications(session, profile)]
 
@@ -155,7 +164,7 @@ async def extract_job_from_file(
     once the user reviews and confirms the form."""
     if source_format not in SUPPORTED_JD_FORMATS:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"source_format must be one of {SUPPORTED_JD_FORMATS}, got {source_format!r}",
         )
     parsed_format = cast(JdSourceFormat, source_format)
@@ -164,9 +173,9 @@ async def extract_job_from_file(
     try:
         text = parse_jd_bytes(file_bytes, parsed_format)
     except EmptyJdDocumentError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except UnsupportedJdFormatError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     fields = extract_job_fields(text)
     return ExtractedJobOut(designation=fields.designation, company=fields.company, description=text)
@@ -211,7 +220,7 @@ def add_ats_feed_jobs(data: AtsFeedIn, session: Session = Depends(get_session)) 
     invalid = [e for e in data.companies if not AtsFeedIn._valid_entry(e)]
     if invalid:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"expected 'platform:company-slug' (greenhouse/lever/ashby), got: {invalid}",
         )
 

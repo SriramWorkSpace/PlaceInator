@@ -75,7 +75,7 @@ def _require_profile(session: Session) -> Profile:
 def _parse_source_format(source_format: str) -> SourceFormat:
     if source_format not in SUPPORTED_FORMATS:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"source_format must be one of {SUPPORTED_FORMATS}, got {source_format!r}",
         )
     return cast(SourceFormat, source_format)
@@ -102,9 +102,9 @@ async def extract_profile_from_resume(
     try:
         fields = extract_profile_preview(parsed_format, file_bytes)
     except EmptyDocumentError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except UnsupportedFormatError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return ExtractedProfileOut(
         full_name=fields.full_name,
@@ -141,9 +141,9 @@ async def upload_resume(
             is_primary=is_primary,
         )
     except EmptyDocumentError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except UnsupportedFormatError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return _to_out(resume)
 

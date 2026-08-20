@@ -216,12 +216,23 @@ class JobSource:
     ) -> httpx.Response | SourceBlocked:
         """The one path adapters should fetch through: robots.txt-gated,
         rate-limited per host, real UA. Returns SourceBlocked instead of
-        raising when robots.txt disallows the path."""
+        raising -- both when robots.txt disallows the path and when the
+        request itself fails at the transport layer.
+
+        A timeout, DNS failure, or dropped connection is the network being
+        unavailable, not a bug: ADR 0003's answer to an unreachable source is
+        "offer manual paste", so it must not surface as a 500 the UI renders
+        as an error. This is the only place adapters touch httpx, so catching
+        here covers all four of them.
+        """
         if not self._robots_allows(url):
             return SourceBlocked(f"robots.txt disallows {url}")
 
         self._rate_limiter_for(url, min_interval).wait()
-        return self._client.get(url, **kwargs)  # type: ignore[arg-type]
+        try:
+            return self._client.get(url, **kwargs)  # type: ignore[arg-type]
+        except httpx.HTTPError as exc:
+            return SourceBlocked(f"could not reach {urlparse(url).netloc}: {exc}")
 
     def _robots_allows(self, url: str) -> bool:
         parsed = urlparse(url)
