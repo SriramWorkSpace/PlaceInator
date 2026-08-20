@@ -13,7 +13,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from urllib.parse import quote, unquote, urlparse, urlunparse
-from urllib.robotparser import RobotFileParser
 
 import httpx
 from selectolax.parser import HTMLParser
@@ -31,48 +30,117 @@ USER_AGENT = (
 _DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
 
-def _can_fetch(parser: RobotFileParser, user_agent: str, url: str) -> bool:
-    """Longest-matching-rule-wins robots.txt evaluation (RFC 9309), in place
-    of ``RobotFileParser.can_fetch``'s own first-match-in-file-order logic.
+@dataclass(frozen=True)
+class _RobotsRule:
+    allow: bool
+    path: str
 
-    Verified against a real host during Indeed adapter development: its
-    ``User-agent: *`` block opens with a blanket ``Allow: /`` before dozens of
-    later, more specific ``Disallow:`` lines (``/viewjob``, ``/jobs/US/``,
-    etc.). ``RobotFileParser.can_fetch`` walks rules in file order and
-    returns the *first* match, so that opening ``Allow: /`` silently shadows
-    every ``Disallow`` after it -- ``can_fetch`` reports paths as allowed that
-    the file's own author, and every RFC 9309-compliant crawler, treats as
-    disallowed. Since ADR 0003's entire compliance boundary rests on this
-    check being correct, a first-match implementation is not good enough to
-    build adapters on top of.
-    """
-    if getattr(parser, "allow_all", False):  # real attr, typeshed gap -- see below
-        return True
-    if getattr(parser, "disallow_all", False):  # real attr, typeshed gap -- see below
-        return False
 
-    entry = None
-    for candidate in parser.entries:  # type: ignore[attr-defined]  # real attr, typeshed gap
-        if candidate.applies_to(user_agent):
-            entry = candidate
-            break
-    if entry is None:
-        entry = parser.default_entry  # type: ignore[attr-defined]  # real attr, typeshed gap
-    if entry is None:
-        return True
+_RobotsGroup = tuple[list[str], list[_RobotsRule]]
 
-    parsed = urlparse(unquote(url))
+
+def _normalize_robots_path(value: str) -> str:
+    """Applied to both robots.txt rule paths and the URLs checked against
+    them, so prefix comparison in _can_fetch is apples-to-apples."""
+    parsed = urlparse(unquote(value))
     normalized = quote(
         urlunparse(("", "", parsed.path, parsed.params, parsed.query, parsed.fragment))
-    ) or "/"
+    )
+    return normalized or "/"
 
+
+def _parse_robots_groups(text: str) -> list[_RobotsGroup]:
+    """Groups a robots.txt file into (user-agent tokens, rules) per RFC 9309.
+
+    Deliberately self-contained rather than routed through
+    ``urllib.robotparser.RobotFileParser``: an earlier version of this
+    function read that class's group-selection result off undocumented,
+    private attributes (``entries``, ``default_entry``,
+    ``RuleLine.path``/``.allowance``), which carry no stability guarantee --
+    confirmed the hard way when they behaved differently between Python
+    3.13.7 (this machine) and 3.13.15 (CI's windows-latest runner), silently
+    breaking every disallow rule. Parsing the raw text ourselves means there
+    is nothing left in a stdlib patch release that can break this again.
+    """
+    groups: list[_RobotsGroup] = []
+    current_agents: list[str] = []
+    current_rules: list[_RobotsRule] = []
+    rule_seen = False
+
+    def flush() -> None:
+        if current_agents:
+            groups.append((list(current_agents), list(current_rules)))
+
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or ":" not in line:
+            continue
+        field_name, _, value = line.partition(":")
+        field_name = field_name.strip().lower()
+        value = value.strip()
+
+        if field_name == "user-agent":
+            if rule_seen:
+                # A User-agent line appearing after this group already has
+                # rules starts a brand-new group (RFC 9309).
+                flush()
+                current_agents = []
+                current_rules = []
+                rule_seen = False
+            current_agents.append(value.lower())
+        elif field_name in ("allow", "disallow"):
+            if not current_agents:
+                continue  # a rule before any User-agent line applies to nothing
+            rule_seen = True
+            if field_name == "disallow" and value == "":
+                continue  # an empty Disallow value means "nothing is disallowed"
+            current_rules.append(
+                _RobotsRule(allow=(field_name == "allow"), path=_normalize_robots_path(value))
+            )
+
+    flush()
+    return groups
+
+
+def _select_robots_rules(groups: list[_RobotsGroup], user_agent: str) -> list[_RobotsRule] | None:
+    """The most specific matching group wins outright -- its rules are used
+    alone, never merged with the wildcard group -- falling back to a "*"
+    group, or to "allow everything" (``None``) if neither is present.
+    Matches a robots.txt agent name against ours by substring, the same
+    semantics ``urllib.robotparser.Entry.applies_to`` used."""
+    ua_lower = user_agent.lower()
+    best_rules: list[_RobotsRule] | None = None
+    best_token_length = -1
+    wildcard_rules: list[_RobotsRule] | None = None
+
+    for agents, rules in groups:
+        for agent in agents:
+            if agent == "*":
+                if wildcard_rules is None:
+                    wildcard_rules = rules
+            elif agent and agent in ua_lower and len(agent) > best_token_length:
+                best_token_length = len(agent)
+                best_rules = rules
+
+    return best_rules if best_rules is not None else wildcard_rules
+
+
+def _can_fetch(groups: list[_RobotsGroup], user_agent: str, url: str) -> bool:
+    """Longest-matching-rule-wins robots.txt evaluation (RFC 9309) against
+    pre-parsed groups -- see _parse_robots_groups for why this doesn't go
+    through RobotFileParser. An empty rule set (no matching group at all)
+    means allow, per RFC 9309's own default."""
+    rules = _select_robots_rules(groups, user_agent)
+    if rules is None:
+        return True
+
+    path = _normalize_robots_path(url)
     best_length = -1
     best_allowed = True
-    for rule in entry.rulelines:
-        matches = rule.path == "*" or normalized.startswith(rule.path)
-        if matches and len(rule.path) > best_length:
+    for rule in rules:
+        if path.startswith(rule.path) and len(rule.path) > best_length:
             best_length = len(rule.path)
-            best_allowed = rule.allowance
+            best_allowed = rule.allow
     return best_allowed
 
 
@@ -137,7 +205,7 @@ class JobSource:
             timeout=_DEFAULT_TIMEOUT,
             follow_redirects=True,
         )
-        self._robots_cache: dict[str, RobotFileParser] = {}
+        self._robots_cache: dict[str, list[_RobotsGroup]] = {}
         self._rate_limiters: dict[str, RateLimiter] = {}
 
     def fetch(self, query: SearchQuery) -> FetchResult:  # pragma: no cover - abstract
@@ -159,25 +227,20 @@ class JobSource:
         parsed = urlparse(url)
         origin = f"{parsed.scheme}://{parsed.netloc}"
 
-        parser = self._robots_cache.get(origin)
-        if parser is None:
-            parser = RobotFileParser()
-            parser.set_url(f"{origin}/robots.txt")
+        groups = self._robots_cache.get(origin)
+        if groups is None:
+            # A missing robots.txt (fetch failure, or a >=400 status on the
+            # robots.txt path itself) is RFC 9309's own "presume allowed",
+            # not "disallow all" -- an empty group list is exactly "allow
+            # everything" to _can_fetch.
             try:
                 response = self._client.get(f"{origin}/robots.txt", timeout=5.0)
-                if response.status_code >= 400:
-                    # No robots.txt served -- RFC 9309 / RobotFileParser's own
-                    # convention on a fetch failure is "presume allowed", not
-                    # "disallow all". A 401/404 on the robots.txt path itself
-                    # is not a statement about the path we actually want.
-                    parser.allow_all = True  # type: ignore[attr-defined]  # real attr, typeshed gap
-                else:
-                    parser.parse(response.text.splitlines())
+                groups = [] if response.status_code >= 400 else _parse_robots_groups(response.text)
             except httpx.HTTPError:
-                parser.allow_all = True  # type: ignore[attr-defined]  # real attr, typeshed gap
-            self._robots_cache[origin] = parser
+                groups = []
+            self._robots_cache[origin] = groups
 
-        return _can_fetch(parser, USER_AGENT, url)
+        return _can_fetch(groups, USER_AGENT, url)
 
     def _rate_limiter_for(self, url: str, min_interval: float) -> RateLimiter:
         host = urlparse(url).netloc

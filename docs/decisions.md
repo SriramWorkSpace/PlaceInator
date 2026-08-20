@@ -215,16 +215,30 @@ and each claim was checked live, not assumed:
 | `linkedin` | Thin — public job-view pages only | **Thinner than predicted: zero.** `robots.txt`'s catch-all `User-agent: *` block is `Disallow: /` — every path, not just search, is closed to any crawler not individually named earlier in the file. |
 | `naukri` | Thin — expect frequent `SourceBlocked` | **Confirmed, and stronger:** every path tried (homepage, `robots.txt` itself, multiple search URL shapes) 403'd behind Akamai edge bot detection for this project's honestly-identifying user agent. A generic browser UA was confirmed, separately, to pass — deliberately not adopted, since that would be the evasion this ADR rules out. |
 
-One shared-infrastructure defect surfaced during indeed's verification:
-`RobotFileParser.can_fetch` (Python stdlib) resolves the first matching rule in file
-order, not RFC 9309's longest-match-wins. Indeed's `User-agent: *` block opens with a
-blanket `Allow: /` before dozens of later, more specific `Disallow:` lines — under
-first-match semantics, that opening `Allow: /` silently shadowed every `Disallow` after
-it, so `can_fetch` reported paths as allowed that the file's own author disallowed.
-Since this check is the entire mechanism this ADR's boundary depends on, a first-match
-implementation was not good enough to build adapters on top of. Replaced with a
-longest-match implementation (`placeinator/jobs/sources/base.py::_can_fetch`) that every
-adapter — including `ats_feed`, retroactively — now goes through.
+Two shared-infrastructure defects surfaced during indeed's verification, in sequence:
+
+1. `RobotFileParser.can_fetch` (Python stdlib) resolves the first matching rule in file
+   order, not RFC 9309's longest-match-wins. Indeed's `User-agent: *` block opens with a
+   blanket `Allow: /` before dozens of later, more specific `Disallow:` lines — under
+   first-match semantics, that opening `Allow: /` silently shadowed every `Disallow`
+   after it, so `can_fetch` reported paths as allowed that the file's own author
+   disallowed. The first fix kept `RobotFileParser` for parsing but replaced its
+   decision logic with a longest-match implementation reading the parsed result off
+   `RobotFileParser.entries` / `.default_entry` / `RuleLine.path` / `.allowance`.
+2. Those are undocumented, private attributes with no stability guarantee, and it
+   showed: CI (`windows-latest`, Python 3.13.15) failed every one of that fix's own
+   tests, while the exact same tests passed locally (Python 3.13.7) — the attributes'
+   behavior had changed between patch releases. Confirmed by pulling the real CI log
+   (not guessed at): every `_can_fetch` call was returning "allowed" unconditionally,
+   the same silent-permissiveness failure mode as defect 1, just relocated.
+
+Final fix: `placeinator/jobs/sources/base.py::_parse_robots_groups` parses robots.txt
+directly from raw text (RFC 9309 group semantics: consecutive `User-agent:` lines,
+longest-matching product token wins outright, falls back to `*`), with no dependency on
+`RobotFileParser` at all. Every adapter — `ats_feed` included, retroactively — goes
+through this. The lesson generalizes past this one bug: undocumented stdlib internals
+are not a foundation to build a compliance boundary on, however convenient the shortcut
+looks in the moment.
 
 ---
 

@@ -7,6 +7,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI was broken on `windows-latest` (Python 3.13.15) while passing locally
+  (Python 3.13.7)** — `placeinator/jobs/sources/base.py::_can_fetch`'s
+  longest-match robots.txt fix (below) read its result off
+  `RobotFileParser.entries`/`.default_entry`/`RuleLine.path`/`.allowance`,
+  undocumented private attributes with no stability guarantee across
+  patch releases. Their behavior changed between those two Python
+  versions, and every one of that fix's own tests failed in CI while
+  passing locally — confirmed by pulling the actual CI log, not guessed
+  at. Rewritten to parse robots.txt directly from raw text
+  (`_parse_robots_groups`), with zero dependency on `RobotFileParser`
+  internals; every adapter, `ats_feed` included, now goes through it.
+  Added a regression test against the real captured Indeed `robots.txt`
+  fixture, not just synthetic strings, so this can't silently regress
+  again. See the "Verified in practice" addendum to
+  [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)
+  for the full story.
+
 ### Added
 
 - **Real logo**, replacing the placeholder rotated square in the sidebar
