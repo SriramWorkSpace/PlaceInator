@@ -96,6 +96,22 @@ export interface ManualJobIn {
 export const JD_SOURCE_FORMATS = ["pdf", "docx"] as const;
 export type JdSourceFormat = (typeof JD_SOURCE_FORMATS)[number];
 
+export const JOB_SEARCH_SOURCES = ["indeed", "linkedin", "naukri"] as const;
+export type JobSearchSource = (typeof JOB_SEARCH_SOURCES)[number];
+
+export interface JobSearchIn {
+  source: JobSearchSource;
+  keywords: string;
+  location?: string;
+}
+
+export interface JobSearchOut {
+  jobs: JobOut[];
+  /** Set, and jobs empty, when the source's own access-control boundary was
+   * hit (ADR 0003) -- expected and common for linkedin/naukri, not an error. */
+  blocked_reason: string | null;
+}
+
 /** Best-effort autofill preview parsed from an uploaded JD file -- designation
  * and company are frequently null (a JD's layout is far less standardized
  * than a resume's), but description is always the full parsed text. */

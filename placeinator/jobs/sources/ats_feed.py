@@ -20,28 +20,22 @@ fabricated ones. The three schemas differ meaningfully:
 from __future__ import annotations
 
 import html
-import re
-from datetime import UTC, date, datetime
 from typing import Any, Literal
 
-from selectolax.parser import HTMLParser
-
 from placeinator.db.enums import SourceKind, WorkMode
-from placeinator.jobs.sources.base import JobSource, RawPosting, SearchQuery, SourceBlocked
+from placeinator.jobs.sources.base import (
+    JobSource,
+    RawPosting,
+    SearchQuery,
+    SourceBlocked,
+    html_to_text,
+    parse_date,
+    parse_epoch_ms,
+)
 
 AtsPlatform = Literal["greenhouse", "lever", "ashby"]
 
 _RATE_LIMIT_SECONDS = 1.0  # matches Lever's own stated Crawl-delay: 1
-
-
-def _html_to_text(raw_html: str) -> str:
-    """Strip markup and collapse whitespace -- chunk_job_description expects
-    prose with real line breaks, not a wall of inline HTML."""
-    if not raw_html:
-        return ""
-    tree = HTMLParser(raw_html)
-    text = tree.text(separator="\n", deep=True) or ""
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 class AtsFeedSource(JobSource):
@@ -105,7 +99,7 @@ class AtsFeedSource(JobSource):
                     description=description,
                     url=job.get("absolute_url"),
                     location=(job.get("location") or {}).get("name"),
-                    posted_at=_parse_date(job.get("first_published")),
+                    posted_at=parse_date(job.get("first_published")),
                 )
             )
         return postings
@@ -121,7 +115,7 @@ class AtsFeedSource(JobSource):
         # HTML-entity-encoded HTML (verified live -- "content" holds literal
         # "&lt;p&gt;" text, not raw "<p>").
         content = response.json().get("content", "")
-        return _html_to_text(html.unescape(content))
+        return html_to_text(html.unescape(content))
 
     # -- Lever ------------------------------------------------------------ #
 
@@ -137,7 +131,7 @@ class AtsFeedSource(JobSource):
         postings_data = response.json()[: self._max_postings_per_company]
         for job in postings_data:
             categories = job.get("categories") or {}
-            description = job.get("descriptionPlain") or _html_to_text(job.get("description") or "")
+            description = job.get("descriptionPlain") or html_to_text(job.get("description") or "")
             postings.append(
                 RawPosting(
                     source_ref=f"lever:{company_slug}:{job['id']}",
@@ -147,7 +141,7 @@ class AtsFeedSource(JobSource):
                     url=job.get("hostedUrl"),
                     location=categories.get("location"),
                     work_mode=_lever_work_mode(job),
-                    posted_at=_parse_epoch_ms(job.get("createdAt")),
+                    posted_at=parse_epoch_ms(job.get("createdAt")),
                 )
             )
         return postings
@@ -170,11 +164,11 @@ class AtsFeedSource(JobSource):
                     source_ref=f"ashby:{company_slug}:{job['id']}",
                     company=company_slug,
                     designation=(job.get("title") or "").strip(),
-                    description=_html_to_text(job.get("descriptionHtml") or ""),
+                    description=html_to_text(job.get("descriptionHtml") or ""),
                     url=job.get("jobUrl"),
                     location=job.get("location"),
                     work_mode=WorkMode.REMOTE if job.get("isRemote") else WorkMode.ANY,
-                    posted_at=_parse_date(job.get("publishedAt")),
+                    posted_at=parse_date(job.get("publishedAt")),
                 )
             )
         return postings
@@ -197,21 +191,3 @@ def _lever_work_mode(job: dict[str, Any]) -> WorkMode:
     if workplace_type == "onsite":
         return WorkMode.ONSITE
     return WorkMode.ANY
-
-
-def _parse_date(value: str | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
-    except ValueError:
-        return None
-
-
-def _parse_epoch_ms(value: int | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromtimestamp(value / 1000, tz=UTC).date()
-    except (ValueError, OSError, OverflowError):
-        return None

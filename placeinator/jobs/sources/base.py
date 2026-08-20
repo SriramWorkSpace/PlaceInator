@@ -8,13 +8,15 @@ paste", not an error.
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
-from datetime import date
-from urllib.parse import urlparse
+from datetime import UTC, date, datetime
+from urllib.parse import quote, unquote, urlparse, urlunparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
+from selectolax.parser import HTMLParser
 
 from placeinator.db.enums import JobType, SourceKind, WorkMode
 
@@ -27,6 +29,51 @@ USER_AGENT = (
 )
 
 _DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+
+def _can_fetch(parser: RobotFileParser, user_agent: str, url: str) -> bool:
+    """Longest-matching-rule-wins robots.txt evaluation (RFC 9309), in place
+    of ``RobotFileParser.can_fetch``'s own first-match-in-file-order logic.
+
+    Verified against a real host during Indeed adapter development: its
+    ``User-agent: *`` block opens with a blanket ``Allow: /`` before dozens of
+    later, more specific ``Disallow:`` lines (``/viewjob``, ``/jobs/US/``,
+    etc.). ``RobotFileParser.can_fetch`` walks rules in file order and
+    returns the *first* match, so that opening ``Allow: /`` silently shadows
+    every ``Disallow`` after it -- ``can_fetch`` reports paths as allowed that
+    the file's own author, and every RFC 9309-compliant crawler, treats as
+    disallowed. Since ADR 0003's entire compliance boundary rests on this
+    check being correct, a first-match implementation is not good enough to
+    build adapters on top of.
+    """
+    if getattr(parser, "allow_all", False):  # real attr, typeshed gap -- see below
+        return True
+    if getattr(parser, "disallow_all", False):  # real attr, typeshed gap -- see below
+        return False
+
+    entry = None
+    for candidate in parser.entries:  # type: ignore[attr-defined]  # real attr, typeshed gap
+        if candidate.applies_to(user_agent):
+            entry = candidate
+            break
+    if entry is None:
+        entry = parser.default_entry  # type: ignore[attr-defined]  # real attr, typeshed gap
+    if entry is None:
+        return True
+
+    parsed = urlparse(unquote(url))
+    normalized = quote(
+        urlunparse(("", "", parsed.path, parsed.params, parsed.query, parsed.fragment))
+    ) or "/"
+
+    best_length = -1
+    best_allowed = True
+    for rule in entry.rulelines:
+        matches = rule.path == "*" or normalized.startswith(rule.path)
+        if matches and len(rule.path) > best_length:
+            best_length = len(rule.path)
+            best_allowed = rule.allowance
+    return best_allowed
 
 
 @dataclass(frozen=True)
@@ -130,7 +177,7 @@ class JobSource:
                 parser.allow_all = True  # type: ignore[attr-defined]  # real attr, typeshed gap
             self._robots_cache[origin] = parser
 
-        return parser.can_fetch(USER_AGENT, url)
+        return _can_fetch(parser, USER_AGENT, url)
 
     def _rate_limiter_for(self, url: str, min_interval: float) -> RateLimiter:
         host = urlparse(url).netloc
@@ -166,3 +213,32 @@ class RateLimiter:
         if remaining > 0:
             time.sleep(remaining)
         self._last_request = time.monotonic()
+
+
+def html_to_text(raw_html: str) -> str:
+    """Strip markup and collapse whitespace -- chunk_job_description expects
+    prose with real line breaks, not a wall of inline HTML. Shared across
+    adapters (ats_feed, indeed) rather than each carrying its own copy."""
+    if not raw_html:
+        return ""
+    tree = HTMLParser(raw_html)
+    text = tree.text(separator="\n", deep=True) or ""
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def parse_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def parse_epoch_ms(value: int | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromtimestamp(value / 1000, tz=UTC).date()
+    except (ValueError, OSError, OverflowError):
+        return None

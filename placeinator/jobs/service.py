@@ -28,7 +28,10 @@ from placeinator.jobs.filtering import (
     score_soft_preferences,
 )
 from placeinator.jobs.sources.ats_feed import AtsFeedSource
-from placeinator.jobs.sources.base import RawPosting, SearchQuery, SourceBlocked
+from placeinator.jobs.sources.base import JobSource, RawPosting, SearchQuery, SourceBlocked
+from placeinator.jobs.sources.indeed import IndeedSource
+from placeinator.jobs.sources.linkedin import LinkedInSource
+from placeinator.jobs.sources.naukri import NaukriSource
 from placeinator.matching.chunking import chunk_job_description
 from placeinator.matching.service import match_resume_to_job
 from placeinator.matching.vectors import (
@@ -239,6 +242,34 @@ def sync_ats_feed(session: Session, companies: list[str]) -> list[Job] | SourceB
         return result
 
     return [upsert_job_from_posting(session, SourceKind.ATS_FEED, posting) for posting in result]
+
+
+# indeed/linkedin/naukri all take the same free-text keywords+location shape
+# (SearchQuery), unlike ats_feed's company-slug list -- one dispatch table
+# and one function covers all three, rather than three near-duplicates of
+# sync_ats_feed's shape.
+_SEARCH_SOURCES: dict[SourceKind, type[JobSource]] = {
+    SourceKind.INDEED: IndeedSource,
+    SourceKind.LINKEDIN: LinkedInSource,
+    SourceKind.NAUKRI: NaukriSource,
+}
+
+
+def search_jobs(
+    session: Session, source: SourceKind, query: SearchQuery
+) -> list[Job] | SourceBlocked:
+    """Keyword/location search against indeed/linkedin/naukri (ADR 0003).
+    ``SourceBlocked`` is the expected, common outcome for linkedin/naukri --
+    see their adapters' module docstrings for why -- and is never treated as
+    an error here, only reported."""
+    adapter_cls = _SEARCH_SOURCES[source]
+    with adapter_cls() as adapter:
+        result = adapter.fetch(query)
+
+    if isinstance(result, SourceBlocked):
+        return result
+
+    return [upsert_job_from_posting(session, source, posting) for posting in result]
 
 
 def _apply_requirements(session: Session, job: Job, description: str) -> None:

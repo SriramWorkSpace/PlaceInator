@@ -11,8 +11,16 @@ import {
   listRankedJobs,
   NotOnboardedError,
   rankResumesForJob,
+  searchJobs,
 } from "@/lib/api";
-import { JD_SOURCE_FORMATS, type JdSourceFormat, type JobRanking, type MatchOut } from "@/lib/types";
+import {
+  JD_SOURCE_FORMATS,
+  JOB_SEARCH_SOURCES,
+  type JdSourceFormat,
+  type JobRanking,
+  type JobSearchSource,
+  type MatchOut,
+} from "@/lib/types";
 
 // Ark UI + @internationalized/date pull in real weight (~180KB raw) for one
 // field on one route -- lazy-loaded the same way Monaco is lazy-loaded on
@@ -59,6 +67,98 @@ async function loadJobs(): Promise<{ rankings: JobRanking[]; ranked: boolean }> 
   }
 }
 
+/**
+ * Keyword/location search against indeed/linkedin/naukri (ADR 0003).
+ * `blocked_reason` is a first-class, expected outcome -- not an error -- for
+ * linkedin/naukri especially, so it's shown as a plain hint pointing at the
+ * manual-paste form below, never as an ErrorText.
+ */
+function JobBoardSearch() {
+  const queryClient = useQueryClient();
+  const [source, setSource] = useState<JobSearchSource>("indeed");
+  const [keywords, setKeywords] = useState("");
+  const [location, setLocation] = useState("");
+
+  const search = useMutation({
+    mutationFn: searchJobs,
+    onSuccess: (result) => {
+      if (result.jobs.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ["jobs", "ranked"] });
+      }
+    },
+  });
+
+  return (
+    <div
+      className="card rounded-[var(--radius-panel)] border p-6"
+      style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+    >
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          search.mutate({ source, keywords, location: location || undefined });
+        }}
+      >
+        <div className="w-32">
+          <Field label="Job board">
+            <Select value={source} onChange={(e) => setSource(e.target.value as JobSearchSource)}>
+              {JOB_SEARCH_SOURCES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <div className="min-w-48 flex-1">
+          <Field label="Keywords">
+            <TextInput
+              required
+              placeholder="Backend Engineer"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div className="w-44">
+          <Field label="Location">
+            <TextInput
+              placeholder="Remote"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button type="submit" disabled={search.isPending}>
+          {search.isPending ? "Searching…" : "Search"}
+        </Button>
+      </form>
+
+      {search.isError && (
+        <div className="mt-3">
+          <ErrorText onDismiss={() => search.reset()}>
+            {(search.error as Error).message}
+          </ErrorText>
+        </div>
+      )}
+
+      {search.isSuccess && search.data.blocked_reason && (
+        <p className="mt-3 text-xs" style={{ color: "var(--fg-subtle)" }}>
+          {source} couldn't be reached ({search.data.blocked_reason}). Paste the job description
+          below instead.
+        </p>
+      )}
+
+      {search.isSuccess && !search.data.blocked_reason && (
+        <p className="mt-3 text-xs" style={{ color: "var(--fg-subtle)" }}>
+          Found {search.data.jobs.length} job{search.data.jobs.length === 1 ? "" : "s"}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function Jobs() {
   const queryClient = useQueryClient();
   const { data, isPending } = useQuery({ queryKey: ["jobs", "ranked"], queryFn: loadJobs });
@@ -97,10 +197,12 @@ export function Jobs() {
   return (
     <Page
       title="Job Intelligence"
-      description="Paste a job description, or upload a JD file, to match it against your resume library (spec §2)."
+      description="Search a job board, paste a job description, or upload a JD file, to match it against your resume library (spec §2)."
     >
+      <JobBoardSearch />
+
       <form
-        className="card space-y-3 rounded-[var(--radius-panel)] border p-6"
+        className="card mt-6 space-y-3 rounded-[var(--radius-panel)] border p-6"
         style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         onSubmit={(e) => {
           e.preventDefault();

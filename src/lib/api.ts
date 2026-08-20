@@ -12,6 +12,8 @@ import type {
   JdSourceFormat,
   JobOut,
   JobRanking,
+  JobSearchIn,
+  JobSearchOut,
   ManualJobIn,
   MatchOut,
   ProfileIn,
@@ -153,6 +155,13 @@ export const setPrimaryResume = (resumeId: number) =>
 // -- Jobs ------------------------------------------------------------------
 
 export const listJobs = () => apiFetch<JobOut[]>("/api/jobs");
+
+/** Keyword/location search against indeed/linkedin/naukri (ADR 0003).
+ * `blocked_reason` set with an empty `jobs` list is an expected, common
+ * outcome for linkedin/naukri, not an error -- the caller should offer
+ * manual paste, not surface a failure. */
+export const searchJobs = (data: JobSearchIn) =>
+  apiFetch<JobSearchOut>("/api/jobs/search", { method: "POST", body: JSON.stringify(data) });
 
 /** Best-first, hard-filtered jobs kept (never hidden) but sorted last with
  * their reason attached. Requires onboarding -- ranking is meaningless

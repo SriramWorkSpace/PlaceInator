@@ -56,19 +56,44 @@ test suite — see the M1 frontend and DatePicker integration commits.
 
 ## M2 — Job intelligence
 
-*In progress.* Shipped: shared adapter infrastructure and the `ats_feed`
-adapter (Greenhouse/Lever/Ashby); hard-constraint filtering and soft-preference
-scoring (`placeinator/jobs/filtering.py`, `rank_jobs` in
-`placeinator/jobs/service.py`); the Jobs UI's ranked list with filter
-explanations; personalized notifications (`list_notifications`,
-`NOTIFICATION_THRESHOLD`, `Job.notification_seen_at`), surfaced on the
-Dashboard, explaining *why* each opportunity qualified via the same
-soft-preference reasons the ranked list shows. `Job.filtered_out_reason` is
-recomputed on every job create and on every preference save
-(`refilter_jobs`), so it never goes stale. Not yet shipped:
-`indeed`/`linkedin`/`naukri` adapters (Playwright, real site reconnaissance,
-and a real chance of hitting ADR 0003's login/CAPTCHA boundary often —
-deliberately deferred rather than guessed at).
+*Complete.* All four source adapters ship (`ats_feed`, `indeed`, `linkedin`,
+`naukri`), each verified live against the real site before any parsing code
+was written, not assumed from the spec's own expectations:
+
+- **`indeed`** — real, working coverage. The search-results page is plain
+  server-rendered HTML with job data embedded as JSON in a `<script>` tag;
+  `robots.txt` permits fetching it (only the per-job `/viewjob` detail page
+  is disallowed for a generic crawler, so the adapter never requests it and
+  works from the shorter search-result snippet instead). No Playwright
+  needed — an earlier note in this file assumed browser automation would be
+  required and was wrong; corrected after live verification.
+- **`linkedin`** — `robots.txt`'s catch-all block is a blanket `Disallow: /`
+  for any unrecognized crawler. Every request is blocked before the adapter
+  ever gets to parse anything; this is stricter than ADR 0003's "thin —
+  public job-view pages only" estimate, not a bug.
+- **`naukri`** — active edge-level (Akamai) bot detection blocks every path
+  tried, including `robots.txt` itself, with a 403 for this project's
+  honestly-identifying user agent. Confirmed live that a generic browser UA
+  gets through — deliberately not adopted, since disguising the UA to evade
+  detection is exactly what ADR 0003 rules out.
+
+Found and fixed a real bug in shared infrastructure while verifying indeed:
+`RobotFileParser.can_fetch` resolves rules by first-match-in-file-order, not
+RFC 9309's longest-match-wins, so a host whose `User-agent: *` block opens
+with a blanket `Allow: /` before later specific `Disallow:` lines (Indeed's
+shape, exactly) was being read as more permissive than the file's own author
+intended. Replaced with a longest-match implementation
+(`placeinator/jobs/sources/base.py::_can_fetch`) that every adapter now goes
+through.
+
+Also shipped: shared adapter infrastructure; hard-constraint filtering and
+soft-preference scoring (`placeinator/jobs/filtering.py`, `rank_jobs` in
+`placeinator/jobs/service.py`); the Jobs UI's ranked list and job-board
+search form, with filter explanations; personalized notifications
+(`list_notifications`, `NOTIFICATION_THRESHOLD`, `Job.notification_seen_at`),
+surfaced on the Dashboard. `Job.filtered_out_reason` is recomputed on every
+job create and on every preference save (`refilter_jobs`), so it never goes
+stale.
 
 - Source adapters in expected-success order: `indeed`, `ats_feed`, `linkedin`, `naukri`
   (see [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)) —

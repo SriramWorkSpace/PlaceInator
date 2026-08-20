@@ -5,12 +5,13 @@ optional regardless of what else ships."""
 from __future__ import annotations
 
 from datetime import date
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from placeinator.db.enums import SourceKind
 from placeinator.db.models import Job, Profile
 from placeinator.db.session import get_session
 from placeinator.jobs.extraction import extract_job_fields
@@ -29,9 +30,10 @@ from placeinator.jobs.service import (
     list_notifications,
     mark_notification_seen,
     rank_jobs,
+    search_jobs,
     sync_ats_feed,
 )
-from placeinator.jobs.sources.base import SourceBlocked
+from placeinator.jobs.sources.base import SearchQuery, SourceBlocked
 from placeinator.profile.service import get_profile
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -217,3 +219,28 @@ def add_ats_feed_jobs(data: AtsFeedIn, session: Session = Depends(get_session)) 
     if isinstance(result, SourceBlocked):
         return AtsFeedOut(jobs=[], blocked_reason=result.reason)
     return AtsFeedOut(jobs=[_to_out(job) for job in result])
+
+
+class JobSearchIn(BaseModel):
+    source: Literal["indeed", "linkedin", "naukri"]
+    keywords: str = ""
+    location: str | None = None
+
+
+class JobSearchOut(BaseModel):
+    jobs: list[JobOut]
+    # Present, and jobs empty, when ADR 0003's boundary was hit -- expected
+    # and common for linkedin/naukri, not exceptional. The UI's response is
+    # to offer manual paste, not to show an error.
+    blocked_reason: str | None = None
+
+
+@router.post("/search", response_model=JobSearchOut)
+def search_jobs_endpoint(
+    data: JobSearchIn, session: Session = Depends(get_session)
+) -> JobSearchOut:
+    query = SearchQuery(keywords=data.keywords, location=data.location)
+    result = search_jobs(session, SourceKind(data.source), query)
+    if isinstance(result, SourceBlocked):
+        return JobSearchOut(jobs=[], blocked_reason=result.reason)
+    return JobSearchOut(jobs=[_to_out(job) for job in result])

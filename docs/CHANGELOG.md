@@ -9,6 +9,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`indeed`, `linkedin`, `naukri` job source adapters, completing M2.**
+  Each verified live before any parsing code was written:
+  - `indeed`: real coverage. The search-results page embeds job data as JSON
+    in a `<script>` tag (server-rendered, no Playwright needed); the adapter
+    reads it directly rather than the disallowed-by-robots.txt `/viewjob`
+    detail page, so descriptions are Indeed's own short snippet, not the
+    full JD — a real, documented ceiling, not a bug.
+  - `linkedin`: `robots.txt`'s catch-all block is `Disallow: /` for any
+    unrecognized crawler — every request is blocked before parsing, which
+    is why there's no HTML-parsing logic in this adapter at all.
+  - `naukri`: Akamai edge bot detection 403s every path tried, including
+    `robots.txt` itself, for this project's honestly-identifying user
+    agent. Confirmed live that a generic UA would get through and
+    deliberately did not adopt it — that would be exactly the evasion
+    ADR 0003 rules out.
+  - New `POST /api/jobs/search` (keyword + location, dispatches to whichever
+    of the three), and a "Search a job board" form on the Jobs page above
+    the existing paste/upload flow.
+  - **Fixed a real bug in shared robots.txt handling**, found while
+    verifying indeed: `RobotFileParser.can_fetch` returns the *first*
+    matching rule in file order, not RFC 9309's longest-match-wins, so a
+    host whose `User-agent: *` opens with a blanket `Allow: /` before later,
+    more specific `Disallow:` lines (indeed.com's actual shape) was read as
+    more permissive than intended. Replaced with a longest-match
+    implementation (`placeinator/jobs/sources/base.py::_can_fetch`) every
+    adapter now goes through — ADR 0003's entire compliance boundary rests
+    on this check being correct.
+  - `html_to_text`/`parse_date`/`parse_epoch_ms`, previously private to
+    `ats_feed.py`, moved to `base.py` as shared adapter utilities now that a
+    second adapter needs them too.
 - **Personalized job notifications (spec §2, completing M2's remaining
   scope).** `GET /api/jobs/notifications` surfaces jobs that pass hard
   filters, have a semantic score against the primary resume, and clear

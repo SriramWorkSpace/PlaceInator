@@ -21,8 +21,11 @@ dependencies = [
     "python-docx>=1.1",
     "openpyxl>=3.1",
     "pylatexenc>=2.10",
-    # Job source adapters (ADR 0003): manual + ats_feed ship in M2's first
-    # slice. Indeed/LinkedIn/Naukri will need Playwright when they land.
+    # Job source adapters (ADR 0003): manual, ats_feed, indeed, linkedin,
+    # naukri. No Playwright -- verified live that indeed's search-results
+    # page is plain server-rendered HTML (a JSON blob embedded in <script>,
+    # not client-rendered), and linkedin/naukri are blocked before any page
+    # would need rendering (robots.txt / edge bot detection respectively).
     "selectolax>=0.4",
 ]
 
