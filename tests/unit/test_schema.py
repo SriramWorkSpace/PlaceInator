@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 from placeinator.db.base import Base
 from placeinator.db.enums import ChunkKind, EventType, JobType, SourceKind, WorkMode
-from placeinator.db.models import Job
+from placeinator.db.models import Job, Profile, Resume
 
 # The `session` fixture lives in tests/conftest.py.
 
@@ -78,6 +78,40 @@ def test_every_constraint_is_named(session):
                 anonymous.append(f"{table.name}.Index")
 
     assert not anonymous, f"anonymous constraints will break batch migrations: {anonymous}"
+
+
+def test_only_one_primary_resume_per_profile_at_the_db_level(session):
+    """The partial unique index, not just service.py, is what must stop a
+    profile from ever having two primary resumes -- app-layer bugs shouldn't
+    be able to corrupt this invariant via a raw update or a race."""
+    profile = Profile(full_name="Jane Doe", email="jane@example.com")
+    session.add(profile)
+    session.flush()
+
+    session.add(
+        Resume(
+            profile=profile,
+            label="A",
+            version=1,
+            source_format="tex",
+            source_text="...",
+            is_primary=True,
+        )
+    )
+    session.flush()
+
+    session.add(
+        Resume(
+            profile=profile,
+            label="B",
+            version=1,
+            source_format="tex",
+            source_text="...",
+            is_primary=True,
+        )
+    )
+    with pytest.raises(sa.exc.IntegrityError):
+        session.flush()
 
 
 def test_enum_values_are_stable_identifiers():

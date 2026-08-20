@@ -7,7 +7,11 @@
  */
 
 import type {
+  ExtractedJobFields,
+  ExtractedProfileFields,
+  JdSourceFormat,
   JobOut,
+  JobRanking,
   ManualJobIn,
   MatchOut,
   ProfileIn,
@@ -118,6 +122,7 @@ export function uploadResume(params: {
   sourceFormat: SourceFormat;
   targetRole?: string;
   jobCategory?: string;
+  isPrimary?: boolean;
   file: File;
 }): Promise<ResumeOut> {
   const form = new FormData();
@@ -125,16 +130,74 @@ export function uploadResume(params: {
   form.set("source_format", params.sourceFormat);
   if (params.targetRole) form.set("target_role", params.targetRole);
   if (params.jobCategory) form.set("job_category", params.jobCategory);
+  form.set("is_primary", params.isPrimary ? "true" : "false");
   form.set("file", params.file);
   return apiFetch<ResumeOut>("/api/resumes", { method: "POST", body: form });
 }
+
+/** Parses an uploaded resume for onboarding autofill only -- writes nothing,
+ * and works before a profile exists. */
+export function extractProfileFromResume(params: {
+  sourceFormat: SourceFormat;
+  file: File;
+}): Promise<ExtractedProfileFields> {
+  const form = new FormData();
+  form.set("source_format", params.sourceFormat);
+  form.set("file", params.file);
+  return apiFetch<ExtractedProfileFields>("/api/resumes/extract", { method: "POST", body: form });
+}
+
+export const setPrimaryResume = (resumeId: number) =>
+  apiFetch<ResumeOut>(`/api/resumes/${resumeId}/primary`, { method: "PATCH" });
 
 // -- Jobs ------------------------------------------------------------------
 
 export const listJobs = () => apiFetch<JobOut[]>("/api/jobs");
 
+/** Best-first, hard-filtered jobs kept (never hidden) but sorted last with
+ * their reason attached. Requires onboarding -- ranking is meaningless
+ * without Preferences to rank against. */
+export async function listRankedJobs(): Promise<JobRanking[]> {
+  try {
+    return await apiFetch<JobRanking[]>("/api/jobs/ranked");
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+/** Jobs worth interrupting the user for: passes hard filters, scores above
+ * the match threshold, and hasn't been marked seen yet. */
+export async function listJobNotifications(): Promise<JobRanking[]> {
+  try {
+    return await apiFetch<JobRanking[]>("/api/jobs/notifications");
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+export const markNotificationSeen = (jobId: number) =>
+  apiFetch<JobOut>(`/api/jobs/${jobId}/notifications/seen`, { method: "POST" });
+
 export const createManualJob = (data: ManualJobIn) =>
   apiFetch<JobOut>("/api/jobs/manual", { method: "POST", body: JSON.stringify(data) });
+
+/** Parses an uploaded JD (PDF/DOCX) for the manual-add form -- writes
+ * nothing. */
+export function extractJobFromFile(params: {
+  sourceFormat: JdSourceFormat;
+  file: File;
+}): Promise<ExtractedJobFields> {
+  const form = new FormData();
+  form.set("source_format", params.sourceFormat);
+  form.set("file", params.file);
+  return apiFetch<ExtractedJobFields>("/api/jobs/extract", { method: "POST", body: form });
+}
 
 // -- Matching --------------------------------------------------------------
 

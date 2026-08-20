@@ -1,9 +1,24 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Button } from "@/components/Form";
 import { EmptyState, Page, SectionCard } from "@/components/Page";
-import { getStatus, SidecarUnavailableError } from "@/lib/api";
+import {
+  getStatus,
+  listJobNotifications,
+  markNotificationSeen,
+  NotOnboardedError,
+  SidecarUnavailableError,
+} from "@/lib/api";
+import type { JobRanking } from "@/lib/types";
 
 export function Dashboard() {
+  const { data: notifications, isPending } = useQuery({
+    queryKey: ["jobs", "notifications"],
+    queryFn: listJobNotifications,
+    retry: (count, err) => !(err instanceof NotOnboardedError) && count < 2,
+  });
+  const hasNotifications = !!notifications && notifications.length > 0;
+
   return (
     <Page
       title="Studio Overview"
@@ -11,12 +26,76 @@ export function Dashboard() {
     >
       <SidecarStatus />
       <div className="mt-6">
-        <EmptyState
-          title="Nothing to show yet"
-          hint="Complete onboarding and add a resume to start seeing matched opportunities and upcoming placement events here."
-        />
+        {hasNotifications ? (
+          <Notifications notifications={notifications} />
+        ) : (
+          !isPending && (
+            <EmptyState
+              title="Nothing to show yet"
+              hint="Complete onboarding and add a resume to start seeing matched opportunities and upcoming placement events here."
+            />
+          )
+        )}
       </div>
     </Page>
+  );
+}
+
+/**
+ * Personalized job notifications (spec §2): jobs that cleared hard filters
+ * and the match threshold, each with the soft-preference reasons that made
+ * it relevant -- explaining *why*, not just surfacing a bare list. Dismissing
+ * one calls the same "mark seen" endpoint the Jobs page's ranked list already
+ * reads Job.filtered_out_reason from, so it never reappears here once acted on.
+ */
+function Notifications({ notifications }: { notifications: JobRanking[] }) {
+  const queryClient = useQueryClient();
+  const markSeen = useMutation({
+    mutationFn: markNotificationSeen,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["jobs", "notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["jobs", "ranked"] });
+    },
+  });
+
+  return (
+    <SectionCard
+      eyebrow="Opportunities"
+      eyebrowColor="var(--section-jobs)"
+      title="New matches"
+      description="Jobs that clear your preferences and match threshold."
+    >
+      <ul className="space-y-3">
+        {notifications.map((n) => (
+          <li
+            key={n.job.id}
+            className="flex items-start justify-between gap-4 rounded-[var(--radius-input)] border p-3"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div>
+              <p className="text-sm font-medium">
+                {n.job.designation}
+                <span className="ml-2" style={{ color: "var(--fg-muted)" }}>
+                  {n.job.company}
+                </span>
+              </p>
+              {n.soft_preference_reasons.length > 0 && (
+                <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
+                  {n.soft_preference_reasons.join(" · ")}
+                </p>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              disabled={markSeen.isPending}
+              onClick={() => markSeen.mutate(n.job.id)}
+            >
+              Dismiss
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }
 

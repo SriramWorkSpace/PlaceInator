@@ -56,8 +56,23 @@ test suite — see the M1 frontend and DatePicker integration commits.
 
 ## M2 — Job intelligence
 
+*In progress.* Shipped: shared adapter infrastructure and the `ats_feed`
+adapter (Greenhouse/Lever/Ashby); hard-constraint filtering and soft-preference
+scoring (`placeinator/jobs/filtering.py`, `rank_jobs` in
+`placeinator/jobs/service.py`); the Jobs UI's ranked list with filter
+explanations; personalized notifications (`list_notifications`,
+`NOTIFICATION_THRESHOLD`, `Job.notification_seen_at`), surfaced on the
+Dashboard, explaining *why* each opportunity qualified via the same
+soft-preference reasons the ranked list shows. `Job.filtered_out_reason` is
+recomputed on every job create and on every preference save
+(`refilter_jobs`), so it never goes stale. Not yet shipped:
+`indeed`/`linkedin`/`naukri` adapters (Playwright, real site reconnaissance,
+and a real chance of hitting ADR 0003's login/CAPTCHA boundary often —
+deliberately deferred rather than guessed at).
+
 - Source adapters in expected-success order: `indeed`, `ats_feed`, `linkedin`, `naukri`
-  (see [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary))
+  (see [ADR 0003](./decisions.md#adr-0003--job-source-adapters-and-their-hard-boundary)) —
+  `ats_feed` shipped first in practice, reversing the documented order
 - Shared adapter infrastructure: `robots.txt`, rate limiting, backoff, caching
 - Job normalization, hard-constraint filtering, soft-preference scoring
 - Jobs UI with ranked list and filter explanations

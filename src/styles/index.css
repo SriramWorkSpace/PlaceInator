@@ -27,20 +27,6 @@
   --radius-input: 14px;
   --radius-pill: 999px;
 
-  /* First genuinely floating/portaled element (the date picker's calendar
-     popover) needed a shadow; a flat card treatment doesn't read as
-     "detached from the page" the way a popover needs to. Restrained
-     two-layer shadow, reusable for future dropdowns/menus/tooltips rather
-     than inlined once. */
-  --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.18), 0 2px 8px -2px rgb(0 0 0 / 0.08);
-  /* Lighter than --shadow-popover -- an inline card lifting slightly needs
-     less separation from the page than a floating menu does. */
-  --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
-  /* Resting-state elevation -- every card floats a little even before
-     hover, not just on interaction. Lighter than the hover shadow so the
-     hover state still reads as a distinct lift, not just more of the same. */
-  --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.10), 0 1px 3px -1px rgb(0 0 0 / 0.06);
-
   /* Strong ease-out for UI (entrances, icon swaps, button feedback). Built-in
      CSS ease-out is too weak; this is the standard replacement. Reuse this
      token for future motion rather than inlining a new cubic-bezier. */
@@ -82,6 +68,23 @@
   --section-career: #7c5a96;
   --section-outreach: #b3577a;
   --section-placement: #c17a3d;
+
+  /* First genuinely floating/portaled element (the date picker's calendar
+     popover) needed a shadow; a flat card treatment doesn't read as
+     "detached from the page" the way a popover needs to. Restrained
+     two-layer shadow, reusable for future dropdowns/menus/tooltips rather
+     than inlined once. Redefined (not shared) per theme below -- a shadow
+     tuned for a light canvas goes invisible against a dark one at the same
+     opacity, so dark mode needs its own, more opaque values, not just a
+     darker canvas underneath the same numbers. */
+  --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.18), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+  /* Lighter than --shadow-popover -- an inline card lifting slightly needs
+     less separation from the page than a floating menu does. */
+  --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.12), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+  /* Resting-state elevation -- every card floats a little even before
+     hover, not just on interaction. Lighter than the hover shadow so the
+     hover state still reads as a distinct lift, not just more of the same. */
+  --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.10), 0 1px 3px -1px rgb(0 0 0 / 0.06);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -114,6 +117,14 @@
     --section-career: #a688c2;
     --section-outreach: #d885a8;
     --section-placement: #e0a066;
+
+    /* Same shape as the light-mode shadows, much higher opacity -- a dark
+       canvas needs a darker shadow than itself to read as elevation at all,
+       where the light canvas's low-alpha black was already dark by
+       comparison. */
+    --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+    --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.35);
+    --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.45), 0 1px 3px -1px rgb(0 0 0 / 0.3);
   }
 }
 
@@ -146,6 +157,10 @@
   --section-career: #a688c2;
   --section-outreach: #d885a8;
   --section-placement: #e0a066;
+
+  --shadow-popover: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 2px 8px -2px rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 8px 20px -6px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.35);
+  --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.45), 0 1px 3px -1px rgb(0 0 0 / 0.3);
 }
 
 html,
@@ -419,3 +434,9 @@ textarea,
   animation: none;
   mix-blend-mode: normal;
 }
+
+/* Page-navigation fade/exit animation lives in AppShell.tsx's PageTransition
+   component (Motion's AnimatePresence), not here -- an earlier attempt built
+   on the View Transitions API never visibly fired, so it was replaced with
+   the same tool already proven to work in this app (the theme toggle's icon
+   swap in src/components/ui/switch.tsx). */

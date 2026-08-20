@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from placeinator.db.models import Preferences, Profile
+from placeinator.jobs.service import refilter_jobs
 from placeinator.profile.schemas import PreferencesIn, ProfileIn
 
 
@@ -43,7 +44,8 @@ def upsert_profile(session: Session, data: ProfileIn) -> Profile:
     if is_first_time:
         profile.onboarded_at = datetime.now(UTC)
 
-    _upsert_preferences(session, profile, data.preferences)
+    preferences = _upsert_preferences(session, profile, data.preferences)
+    refilter_jobs(session, preferences)
 
     session.flush()
     return profile

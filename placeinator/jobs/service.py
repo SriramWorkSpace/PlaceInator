@@ -13,16 +13,24 @@ Two paths share one persistence core (`_apply_requirements`):
 
 from __future__ import annotations
 
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from placeinator.db.enums import RequirementKind, SourceKind
-from placeinator.db.models import Job, JobRequirement
+from placeinator.db.models import Job, JobRequirement, Preferences, Profile
+from placeinator.jobs.filtering import (
+    SEMANTIC_MATCH_WEIGHT,
+    SOFT_PREFERENCE_WEIGHT,
+    apply_hard_filters,
+    score_soft_preferences,
+)
 from placeinator.jobs.sources.ats_feed import AtsFeedSource
 from placeinator.jobs.sources.base import RawPosting, SearchQuery, SourceBlocked
 from placeinator.matching.chunking import chunk_job_description
+from placeinator.matching.service import match_resume_to_job
 from placeinator.matching.vectors import (
     EMBEDDING_DIM,
     EMBEDDING_MODEL_NAME,
@@ -31,9 +39,57 @@ from placeinator.matching.vectors import (
 )
 
 
+class JobNotFoundError(ValueError):
+    pass
+
+
+# Minimum overall_score for a job to surface as a personalized notification
+# (spec §2: "opportunities that meet their preferences and match threshold").
+# Deliberately separate from ranking, which shows every non-filtered job
+# regardless of score -- notifications are the subset worth interrupting the
+# user for. Tunable without a code change once config/scoring.toml exists,
+# same as placeinator.matching.scoring.COMPONENT_WEIGHTS.
+NOTIFICATION_THRESHOLD = 0.6
+
+
+@dataclass(frozen=True)
+class JobRanking:
+    """One job's place in the personalized ranking (spec §2's Personalized Job
+    Ranking): the hard-filter verdict plus the semantic and soft-preference
+    signals that combine into overall_score, each kept separate so the UI can
+    show *why* a job ranked where it did rather than just the number."""
+
+    job: Job
+    filtered_out_reason: str | None
+    # None when there is no primary resume to score against -- soft
+    # preferences and hard filters still apply, only the semantic half of
+    # the ranking is unavailable.
+    semantic_score: float | None
+    soft_preference_score: float
+    soft_preference_reasons: list[str] = field(default_factory=list)
+
+    @property
+    def overall_score(self) -> float:
+        if self.filtered_out_reason is not None:
+            return 0.0
+        if self.semantic_score is None:
+            return self.soft_preference_score
+        return (
+            SEMANTIC_MATCH_WEIGHT * self.semantic_score
+            + SOFT_PREFERENCE_WEIGHT * self.soft_preference_score
+        )
+
+
 def list_jobs(session: Session) -> list[Job]:
     stmt = select(Job).order_by(Job.created_at.desc())
     return list(session.execute(stmt).scalars())
+
+
+def _current_preferences(session: Session) -> Preferences | None:
+    # Single-user application (placeinator.profile.service.get_profile is the
+    # same idiom): exactly one Profile row, so there is no id to look up by.
+    profile = session.execute(select(Profile).limit(1)).scalar_one_or_none()
+    return profile.preferences if profile else None
 
 
 def create_manual_job(
@@ -59,6 +115,7 @@ def create_manual_job(
     )
     session.add(job)
     _apply_requirements(session, job, description)
+    job.filtered_out_reason = apply_hard_filters(job, _current_preferences(session))
     session.flush()
     return job
 
@@ -90,7 +147,80 @@ def upsert_job_from_posting(session: Session, source: SourceKind, posting: RawPo
     job.description = posting.description
 
     _apply_requirements(session, job, posting.description)
+    job.filtered_out_reason = apply_hard_filters(job, _current_preferences(session))
     session.flush()
+    return job
+
+
+def refilter_jobs(session: Session, preferences: Preferences | None) -> None:
+    """Re-evaluates hard constraints against every existing job -- called
+    whenever preferences change (placeinator.profile.service.upsert_profile),
+    so Job.filtered_out_reason never goes stale after a save."""
+    for job in list_jobs(session):
+        job.filtered_out_reason = apply_hard_filters(job, preferences)
+
+
+def rank_jobs(session: Session, profile: Profile) -> list[JobRanking]:
+    """The Jobs UI's ranked list (spec §2's Personalized Job Ranking):
+    combines the semantic match against the profile's primary resume with
+    the soft-preference signal, sorted best first. Filtered-out jobs are
+    never hidden -- they sort last, with the reason attached, per
+    Job.filtered_out_reason's own contract ("kept, not deleted").
+    """
+    preferences = profile.preferences
+    primary_resume = next((r for r in profile.resumes if r.is_primary), None)
+
+    rankings = []
+    for job in list_jobs(session):
+        soft = score_soft_preferences(job, preferences)
+        semantic_score = None
+        if primary_resume is not None and job.filtered_out_reason is None:
+            match_result = match_resume_to_job(session, primary_resume, job)
+            semantic_score = match_result.personalized_score
+
+        rankings.append(
+            JobRanking(
+                job=job,
+                filtered_out_reason=job.filtered_out_reason,
+                semantic_score=semantic_score,
+                soft_preference_score=soft.value,
+                soft_preference_reasons=soft.reasons,
+            )
+        )
+
+    rankings.sort(key=lambda r: (r.filtered_out_reason is not None, -r.overall_score))
+    return rankings
+
+
+def _qualifies_for_notification(ranking: JobRanking) -> bool:
+    return (
+        ranking.filtered_out_reason is None
+        and ranking.semantic_score is not None
+        and ranking.overall_score >= NOTIFICATION_THRESHOLD
+    )
+
+
+def list_notifications(session: Session, profile: Profile) -> list[JobRanking]:
+    """Jobs that qualify as a personalized notification (spec §2) and haven't
+    been marked seen yet: passes hard filters, has a semantic score against
+    the primary resume (no primary resume means no notifications -- there is
+    nothing to say "this matches you" about), and clears
+    NOTIFICATION_THRESHOLD. Sorted the same as rank_jobs, best first.
+    """
+    return [
+        r
+        for r in rank_jobs(session, profile)
+        if _qualifies_for_notification(r) and r.job.notification_seen_at is None
+    ]
+
+
+def mark_notification_seen(session: Session, job_id: int) -> Job:
+    job = session.get(Job, job_id)
+    if job is None:
+        raise JobNotFoundError(job_id)
+    if job.notification_seen_at is None:
+        job.notification_seen_at = datetime.now(UTC)
+        session.flush()
     return job
 
 

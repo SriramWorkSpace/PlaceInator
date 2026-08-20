@@ -1,10 +1,23 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button, ErrorText, Field, Select, TextInput } from "@/components/Form";
 import { Page } from "@/components/Page";
-import { getProfile, NotOnboardedError, putProfile } from "@/lib/api";
-import { DEFAULT_PREFERENCES, type ProfileIn, type ProfileOut, type WorkMode } from "@/lib/types";
+import {
+  extractProfileFromResume,
+  getProfile,
+  NotOnboardedError,
+  putProfile,
+  uploadResume,
+} from "@/lib/api";
+import {
+  DEFAULT_PREFERENCES,
+  SOURCE_FORMATS,
+  type ProfileIn,
+  type ProfileOut,
+  type SourceFormat,
+  type WorkMode,
+} from "@/lib/types";
 
 const EMPTY_FORM: ProfileIn = {
   full_name: "",
@@ -15,6 +28,12 @@ const EMPTY_FORM: ProfileIn = {
   student_id: null,
   name_aliases: [],
   preferences: DEFAULT_PREFERENCES,
+};
+
+const FORMAT_BY_EXTENSION: Record<string, SourceFormat> = {
+  pdf: "pdf",
+  docx: "docx",
+  tex: "tex",
 };
 
 export function Settings() {
@@ -30,11 +49,51 @@ export function Settings() {
   // is the source of truth until the user saves.
   const active = form ?? (data ? toForm(data) : EMPTY_FORM);
 
+  // Onboarding-only: a resume staged here is uploaded as the primary resume
+  // right after the profile itself is saved.
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeFormat, setResumeFormat] = useState<SourceFormat>("pdf");
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const extractMutation = useMutation({
+    mutationFn: extractProfileFromResume,
+    onSuccess: (fields) => {
+      // Only fill fields the user hasn't already typed something into --
+      // autofill should never clobber a manual edit.
+      setForm({
+        ...active,
+        full_name: active.full_name || fields.full_name || "",
+        email: active.email || fields.email || "",
+        phone: active.phone || fields.phone,
+        college: active.college || fields.college,
+        department: active.department || fields.department,
+      });
+    },
+  });
+
+  const uploadPrimaryMutation = useMutation({
+    mutationFn: uploadResume,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resumes"] });
+    },
+  });
+
   const mutation = useMutation({
     mutationFn: putProfile,
-    onSuccess: (profile) => {
+    onSuccess: async (profile) => {
       queryClient.setQueryData(["profile"], profile);
       setForm(null);
+
+      if (resumeFile) {
+        await uploadPrimaryMutation.mutateAsync({
+          label: "Primary Resume",
+          sourceFormat: resumeFormat,
+          isPrimary: true,
+          file: resumeFile,
+        });
+        setResumeFile(null);
+        if (fileInput.current) fileInput.current.value = "";
+      }
     },
   });
 
@@ -47,6 +106,8 @@ export function Settings() {
       </Page>
     );
   }
+
+  const saving = mutation.isPending || uploadPrimaryMutation.isPending;
 
   return (
     <Page
@@ -64,6 +125,62 @@ export function Settings() {
           mutation.mutate(active);
         }}
       >
+        {!data && (
+          <div
+            className="card rounded-[var(--radius-panel)] border p-4"
+            style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+          >
+            <Field
+              label="Autofill from a resume (optional)"
+              hint="Upload a resume to prefill the fields below. It's saved as your primary resume once you complete onboarding."
+            >
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-48 flex-1">
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept=".pdf,.docx,.tex"
+                    className="w-full text-sm"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setResumeFile(file);
+                      if (!file) return;
+                      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+                      const format = FORMAT_BY_EXTENSION[ext] ?? "pdf";
+                      setResumeFormat(format);
+                      extractMutation.mutate({ sourceFormat: format, file });
+                    }}
+                  />
+                </div>
+                <div className="w-28">
+                  <Select
+                    value={resumeFormat}
+                    onChange={(e) => setResumeFormat(e.target.value as SourceFormat)}
+                  >
+                    {SOURCE_FORMATS.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </Field>
+            {extractMutation.isPending && (
+              <p className="mt-2 text-xs" style={{ color: "var(--fg-subtle)" }}>
+                Reading resume…
+              </p>
+            )}
+            {extractMutation.isError && (
+              <div className="mt-2">
+                <ErrorText onDismiss={() => extractMutation.reset()}>
+                  {(extractMutation.error as Error).message}
+                </ErrorText>
+              </div>
+            )}
+          </div>
+        )}
+
         <Field label="Full name">
           <TextInput
             required
@@ -137,14 +254,19 @@ export function Settings() {
           />
         </Field>
 
-        {mutation.isError && (
-          <ErrorText onDismiss={() => mutation.reset()}>
-            {(mutation.error as Error).message}
+        {(mutation.isError || uploadPrimaryMutation.isError) && (
+          <ErrorText
+            onDismiss={() => {
+              mutation.reset();
+              uploadPrimaryMutation.reset();
+            }}
+          >
+            {((mutation.error ?? uploadPrimaryMutation.error) as Error).message}
           </ErrorText>
         )}
 
-        <Button type="submit" disabled={mutation.isPending}>
-          {mutation.isPending ? "Saving…" : data ? "Save changes" : "Complete onboarding"}
+        <Button type="submit" disabled={saving}>
+          {saving ? "Saving…" : data ? "Save changes" : "Complete onboarding"}
         </Button>
       </form>
     </Page>

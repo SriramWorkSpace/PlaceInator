@@ -9,6 +9,60 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Personalized job notifications (spec §2, completing M2's remaining
+  scope).** `GET /api/jobs/notifications` surfaces jobs that pass hard
+  filters, have a semantic score against the primary resume, and clear
+  `NOTIFICATION_THRESHOLD` (0.6) — a deliberately separate, higher bar than
+  the ranked list, which shows every non-filtered job regardless of score.
+  `Job.notification_seen_at` (new column, migration `1ca39ea10a65`) tracks
+  which notifications the user has already dismissed
+  (`POST /api/jobs/{id}/notifications/seen`), so nothing reappears once
+  acted on. Surfaced on the Dashboard, previously just a static empty state,
+  with the same soft-preference reasons the Jobs page's ranked list already
+  shows — one explanation source, two surfaces.
+
+- **Hard-constraint filtering, soft-preference scoring, and a ranked Jobs UI
+  (M2).** `placeinator/jobs/filtering.py` evaluates spec §2's hard
+  constraints (minimum salary, bond/contract duration, experience range,
+  relocation) against every job — a violation sets `Job.filtered_out_reason`
+  but the job is kept, never deleted, so the UI can explain the exclusion.
+  Soft preferences (work mode, city, target role, salary) score 0–1 and
+  never eliminate a job. `GET /api/jobs/ranked` combines that with the
+  semantic match against the profile's primary resume into one ranked list;
+  filtered jobs sort last with their reason shown, not hidden. Re-runs
+  automatically whenever preferences are saved (`refilter_jobs`, wired into
+  `profile.service.upsert_profile`) so the ranking never goes stale. Scoped
+  to filtering/scoring/UI only for this pass — `indeed`/`linkedin`/`naukri`
+  adapters remain deferred (Playwright + real site reconnaissance, out of
+  scope here).
+- **JD file upload on the manual job-add form.** `POST /api/jobs/extract`
+  parses an uploaded PDF/DOCX job description (`placeinator/jobs/parsing.py`,
+  `placeinator/jobs/extraction.py` — regex/heuristic, no LLM) and prefills
+  designation, company, and the full description text; a JD's layout is far
+  less standardized than a resume's, so designation/company are frequently
+  null and the full parsed text (always present) is what actually matters
+  for matching. Autofill never overwrites a field the user already typed.
+  Paste-a-JD remains fully supported alongside this — upload is additive,
+  not a replacement.
+- **Fixed a real bug in the page-navigation transition**, not just restyled:
+  the first attempt was built on the View Transitions API via react-router's
+  `viewTransition` prop, which never visibly fired. Replaced with Motion's
+  `AnimatePresence` (`AppShell.tsx`'s `PageTransition`, via `useOutlet()` +
+  `useLocation()`) — the same tool already proven working in this app for
+  the theme toggle's icon swap — for a fade-out/fade-in between routes.
+- **Resume-driven profile autofill during onboarding.** Uploading a resume on
+  the onboarding form now parses it for name/email/phone/college/department
+  (`placeinator/resumes/extraction.py` — regex/heuristic, no LLM, per
+  [ADR 0002](./decisions.md#adr-0002--deterministic-engine-no-llm-generation))
+  and prefills the form; only fields the user hasn't already typed into are
+  filled, never overwritten. The same resume is saved as the profile's
+  **primary resume** once onboarding completes. `Resume.is_primary` is a new
+  column with a partial unique index (`uq_resume_primary_per_profile`, SQLite
+  `WHERE is_primary`) enforcing exactly one primary per profile at the DB
+  level, not just in application code — see migration
+  `14cac5fce49b_add_resume_is_primary_flag`. A profile's first resume is
+  always primary regardless of how it's uploaded; later resumes can be
+  promoted from the Resume Library (`PATCH /api/resumes/{id}/primary`).
 - **M1 complete.** Full onboarding → resume upload → job intake → ranked
   match loop, verified live through the running UI. Manual job intake gained
   an `Application deadline` field (`Job.deadline` existed as a column since

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, ErrorText, Field, Select, TextInput } from "@/components/Form";
 import { EmptyState, Page } from "@/components/Page";
 import { Table, TableCell, TableHead, TableRow } from "@/components/Table";
-import { listResumes, uploadResume } from "@/lib/api";
+import { listResumes, setPrimaryResume, uploadResume } from "@/lib/api";
 import { SOURCE_FORMATS, type SourceFormat } from "@/lib/types";
 
 export function Resumes() {
@@ -14,6 +14,7 @@ export function Resumes() {
   const [label, setLabel] = useState("");
   const [targetRole, setTargetRole] = useState("");
   const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pdf");
+  const [isPrimary, setIsPrimary] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
@@ -22,9 +23,17 @@ export function Resumes() {
       queryClient.invalidateQueries({ queryKey: ["resumes"] });
       setLabel("");
       setTargetRole("");
+      setIsPrimary(false);
       if (fileInput.current) fileInput.current.value = "";
     },
   });
+
+  const primaryMutation = useMutation({
+    mutationFn: setPrimaryResume,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["resumes"] }),
+  });
+
+  const hasResumes = !!resumes && resumes.length > 0;
 
   return (
     <Page title="Resume Library" description="Your role-specific resume library (spec §3).">
@@ -35,7 +44,7 @@ export function Resumes() {
           e.preventDefault();
           const file = fileInput.current?.files?.[0];
           if (!file) return;
-          mutation.mutate({ label, sourceFormat, targetRole: targetRole || undefined, file });
+          mutation.mutate({ label, sourceFormat, targetRole: targetRole || undefined, isPrimary, file });
         }}
       >
         <div className="w-40">
@@ -82,6 +91,16 @@ export function Resumes() {
             />
           </Field>
         </div>
+        {hasResumes && (
+          <label className="flex items-center gap-2 pb-2.5 text-sm">
+            <input
+              type="checkbox"
+              checked={isPrimary}
+              onChange={(e) => setIsPrimary(e.target.checked)}
+            />
+            Set as primary
+          </label>
+        )}
         <Button type="submit" disabled={mutation.isPending}>
           {mutation.isPending ? "Uploading…" : "Upload"}
         </Button>
@@ -94,6 +113,13 @@ export function Resumes() {
           </ErrorText>
         </div>
       )}
+      {primaryMutation.isError && (
+        <div className="mt-2">
+          <ErrorText onDismiss={() => primaryMutation.reset()}>
+            {(primaryMutation.error as Error).message}
+          </ErrorText>
+        </div>
+      )}
 
       <div className="mt-6">
         {isPending ? (
@@ -103,11 +129,11 @@ export function Resumes() {
         ) : !resumes || resumes.length === 0 ? (
           <EmptyState
             title="No resumes yet"
-            hint="Upload a PDF, DOCX, or LaTeX resume above. Each one is parsed into skills, projects, and experience so jobs can be matched against all of them."
+            hint="Upload a PDF, DOCX, or LaTeX resume above. Each one is parsed into skills, projects, and experience so jobs can be matched against all of them. The first one you upload becomes your primary resume."
           />
         ) : (
           <Table>
-            <TableHead columns={["Label", "Target role", "Format", "Version", "Chunks"]} />
+            <TableHead columns={["Label", "Target role", "Format", "Version", "Chunks", "Primary"]} />
             <tbody>
               {resumes.map((r) => (
                 <TableRow key={r.id}>
@@ -116,6 +142,26 @@ export function Resumes() {
                   <TableCell mono>{r.source_format}</TableCell>
                   <TableCell mono>v{r.version}</TableCell>
                   <TableCell mono>{r.chunk_count}</TableCell>
+                  <TableCell>
+                    {r.is_primary ? (
+                      <span
+                        className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
+                        style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+                      >
+                        Primary
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-xs underline"
+                        style={{ color: "var(--fg-muted)" }}
+                        disabled={primaryMutation.isPending}
+                        onClick={() => primaryMutation.mutate(r.id)}
+                      >
+                        Set as primary
+                      </button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </tbody>

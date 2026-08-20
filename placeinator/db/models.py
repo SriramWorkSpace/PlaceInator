@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+import sqlalchemy as sa
 from sqlalchemy import (
     JSON,
     Date,
@@ -118,6 +119,15 @@ class Resume(Base, TimestampMixin):
     # authoritative copy -- never re-derive it from the file on disk.
     source_text: Mapped[str] = mapped_column(Text)
 
+    # The resume shown by default in matching/tailoring UIs. Exactly one per
+    # profile is enforced by the partial unique index below, not just app code,
+    # so a bug can't silently leave a profile with zero or two primaries.
+    # server_default (not just the Python-side default) matches the migration
+    # that added this column to an already-populated table -- see
+    # 14cac5fce49b_add_resume_is_primary_flag.py -- and alembic check compares
+    # both, per migrations/env.py's compare_server_default=True.
+    is_primary: Mapped[bool] = mapped_column(default=False, server_default=sa.false())
+
     profile: Mapped[Profile] = relationship(back_populates="resumes")
     chunks: Mapped[list[ResumeChunk]] = relationship(
         back_populates="resume", cascade="all, delete-orphan"
@@ -126,7 +136,15 @@ class Resume(Base, TimestampMixin):
         back_populates="resume", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (UniqueConstraint("profile_id", "label", "version"),)
+    __table_args__ = (
+        UniqueConstraint("profile_id", "label", "version"),
+        Index(
+            "uq_resume_primary_per_profile",
+            "profile_id",
+            unique=True,
+            sqlite_where=sa.text("is_primary"),
+        ),
+    )
 
 
 class ResumeChunk(Base):
@@ -201,6 +219,13 @@ class Job(Base, TimestampMixin):
     # Result of hard-constraint filtering. A rejected job is kept, not deleted,
     # so the UI can explain why it was excluded.
     filtered_out_reason: Mapped[str | None] = mapped_column(Text)
+
+    # Set once the user has seen this job surfaced as a personalized
+    # notification (spec §2's Personalized Job Notifications) -- None means
+    # "not yet shown as a notification", not "never qualified"; a job that
+    # stops qualifying (e.g. preferences change) simply stops appearing,
+    # this timestamp is never cleared.
+    notification_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     requirements: Mapped[list[JobRequirement]] = relationship(
         back_populates="job", cascade="all, delete-orphan"

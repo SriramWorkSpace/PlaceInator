@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, Outlet } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { NavLink, useLocation, useOutlet } from "react-router-dom";
 
 import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
 import { Switch } from "@/components/ui/switch";
@@ -30,10 +31,48 @@ export function AppShell() {
     <div className="flex h-full">
       <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
       <main className="min-w-0 flex-1 overflow-y-auto">
-        <Outlet />
+        <PageTransition />
       </main>
       <ThemeToggle />
     </div>
+  );
+}
+
+// Same curve as --ease-out in styles/index.css -- Motion's transition prop
+// takes a literal array, not a CSS var, so the value is duplicated here
+// rather than forked into a different-looking one.
+const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+/**
+ * Fades the leaving route out, then fades the arriving one in.
+ *
+ * useOutlet() (not <Outlet/>) is what makes an exit animation possible at
+ * all: it hands back the matched route's element as a value, so the element
+ * keyed to the *previous* location can keep rendering inside AnimatePresence
+ * through its exit animation instead of being unmounted the instant the URL
+ * changes. This replaced an earlier attempt built on the View Transitions
+ * API, which never visibly fired -- AnimatePresence is the same tool this
+ * app already relies on for the theme toggle's icon swap
+ * (src/components/ui/switch.tsx), so it's the proven choice rather than a
+ * browser API this codebase has no other working example of.
+ */
+function PageTransition() {
+  const location = useLocation();
+  const element = useOutlet();
+  const reduceMotion = useReducedMotion();
+  const duration = reduceMotion ? 0 : undefined;
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={location.pathname}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: { duration: duration ?? 0.16, ease: EASE_OUT } }}
+        exit={{ opacity: 0, transition: { duration: duration ?? 0.12, ease: EASE_OUT } }}
+      >
+        {element}
+      </motion.div>
+    </AnimatePresence>
   );
 }
 

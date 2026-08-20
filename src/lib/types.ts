@@ -70,6 +70,17 @@ export interface ResumeOut {
   job_category: string | null;
   source_format: string;
   chunk_count: number;
+  is_primary: boolean;
+}
+
+/** Best-effort autofill preview parsed from an uploaded resume, before any
+ * profile exists -- every field is independently nullable. */
+export interface ExtractedProfileFields {
+  full_name: string | null;
+  email: string | null;
+  phone: string | null;
+  college: string | null;
+  department: string | null;
 }
 
 export interface ManualJobIn {
@@ -82,6 +93,18 @@ export interface ManualJobIn {
   deadline: string | null;
 }
 
+export const JD_SOURCE_FORMATS = ["pdf", "docx"] as const;
+export type JdSourceFormat = (typeof JD_SOURCE_FORMATS)[number];
+
+/** Best-effort autofill preview parsed from an uploaded JD file -- designation
+ * and company are frequently null (a JD's layout is far less standardized
+ * than a resume's), but description is always the full parsed text. */
+export interface ExtractedJobFields {
+  designation: string | null;
+  company: string | null;
+  description: string;
+}
+
 export interface JobOut {
   id: number;
   source: string;
@@ -91,6 +114,21 @@ export interface JobOut {
   deadline: string | null;
   required_skill_ids: string[];
   preferred_skill_ids: string[];
+  /** Hard-constraint verdict (spec §2). Set means excluded, but the job is
+   * still returned -- never hidden -- so the UI can explain why. */
+  filtered_out_reason: string | null;
+}
+
+/** One job's place in the personalized ranking (spec §2's Personalized Job
+ * Ranking) -- combines the semantic match against the primary resume with
+ * the soft-preference signal. */
+export interface JobRanking {
+  job: JobOut;
+  /** Null when there's no primary resume to score against. */
+  semantic_score: number | null;
+  soft_preference_score: number;
+  soft_preference_reasons: string[];
+  overall_score: number;
 }
 
 export interface ComponentScore {
