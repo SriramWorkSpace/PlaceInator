@@ -30,6 +30,20 @@ COMPONENT_WEIGHTS: dict[str, float] = {
 
 SCORING_VERSION = "1"
 
+
+def _clamp_unit(value: float) -> float:
+    """Every component value is contractually in [0, 1] -- MatchResult.explanation
+    is user-facing and the weighted sum assumes it.
+
+    Cosine similarity of two *near-identical* float32 vectors can land a few
+    ULPs above 1.0 (e.g. 1.0000001192092896 for an exact role-title match),
+    and whether it does depends on the CPU's vector instructions -- it stayed
+    under 1.0 on the dev machine and crossed it on CI's runner. Clamping both
+    ends, rather than only the lower one, makes the bound hold on every
+    machine instead of most of them.
+    """
+    return min(1.0, max(0.0, value))
+
 _TOP_K_EVIDENCE = 3
 
 
@@ -90,7 +104,7 @@ def _score_overall(resume_vectors: np.ndarray, jd_vectors: np.ndarray) -> Compon
     jd_mean = _mean_pool(jd_vectors)
     has_content = resume_vectors.size and jd_vectors.size
     similarity = float(np.dot(resume_mean, jd_mean)) if has_content else 0.0
-    return ComponentScore(value=max(0.0, similarity), weight=COMPONENT_WEIGHTS["overall"])
+    return ComponentScore(value=_clamp_unit(similarity), weight=COMPONENT_WEIGHTS["overall"])
 
 
 def _score_skills(chunks: list[TextChunk], requirements: list[RequirementLine]) -> ComponentScore:
@@ -136,7 +150,7 @@ def _score_bullets_against_requirements(
     best_bullet_idx = sims.argmax(axis=1)
     best_scores = sims[np.arange(len(requirements)), best_bullet_idx]
 
-    value = float(np.clip(best_scores.mean(), 0.0, 1.0))
+    value = _clamp_unit(float(best_scores.mean()))
 
     ranked = sorted(
         zip(requirements, best_bullet_idx, best_scores, strict=True),
@@ -147,7 +161,7 @@ def _score_bullets_against_requirements(
         Evidence(
             resume_text=bullets[int(bullet_idx)].text,
             requirement_text=req.text,
-            similarity=float(sim),
+            similarity=_clamp_unit(float(sim)),
         )
         for req, bullet_idx, sim in ranked[:_TOP_K_EVIDENCE]
     ]
@@ -159,7 +173,7 @@ def _score_role(resume_target_role: str | None, jd_title: str) -> ComponentScore
         return ComponentScore(value=0.5, weight=COMPONENT_WEIGHTS["role"])
     vectors = embed_texts([resume_target_role, jd_title])
     similarity = float(np.dot(vectors[0], vectors[1]))
-    return ComponentScore(value=max(0.0, similarity), weight=COMPONENT_WEIGHTS["role"])
+    return ComponentScore(value=_clamp_unit(similarity), weight=COMPONENT_WEIGHTS["role"])
 
 
 def score_match(

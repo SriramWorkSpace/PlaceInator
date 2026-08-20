@@ -22,6 +22,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A component score could exceed its documented `[0, 1]` bound.**
+  `_score_overall` and `_score_role` clamped only the *lower* end with
+  `max(0.0, ...)`, but cosine similarity of two near-identical float32 vectors
+  lands a few ULPs above 1.0 — an exact role-title match produced
+  `1.0000001192092896`. Whether it crossed the bound depended on the CPU's
+  vector instructions, so it stayed under on the dev machine and broke on CI.
+  `MatchResult.explanation` is user-facing and the weighted sum assumes the
+  bound, so all three scorers now go through one `_clamp_unit` helper.
+  **This bug was pre-existing and invisible**: the only CI step that ran these
+  tests was marked `continue-on-error`, so it had been failing silently.
+  Making the model suite a required gate surfaced it on the first run.
 - **A transport failure in any job source is now `SourceBlocked`, not a 500.**
   No adapter caught `httpx.HTTPError`, so a connect timeout or DNS failure
   propagated out of `fetch()` and reached the UI as an error — precisely the
