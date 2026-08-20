@@ -94,6 +94,14 @@ class Preferences(Base, TimestampMixin):
     max_bond_months: Mapped[int | None] = mapped_column(Integer)
     other_restrictions: Mapped[str | None] = mapped_column(Text)
 
+    # Minimum overall_score (0..1) for a job to surface as a personalized
+    # notification (spec §2) -- the Settings page's Notifications control.
+    # Same default as the fallback in placeinator.jobs.service so a profile
+    # created before this column existed behaves identically once migrated.
+    notification_threshold: Mapped[float] = mapped_column(
+        Float, default=0.6, server_default=sa.text("0.6")
+    )
+
     profile: Mapped[Profile] = relationship(back_populates="preferences")
 
 

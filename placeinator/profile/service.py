@@ -72,4 +72,5 @@ def _upsert_preferences(session: Session, profile: Profile, data: PreferencesIn)
     prefs.accepts_service_bond = data.accepts_service_bond
     prefs.max_bond_months = data.max_bond_months
     prefs.other_restrictions = data.other_restrictions
+    prefs.notification_threshold = data.notification_threshold
     return prefs

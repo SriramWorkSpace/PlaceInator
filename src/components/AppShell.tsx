@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
 
+import logo from "@/assets/logo.png";
 import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
 import { Switch } from "@/components/ui/switch";
 import { getProfile, NotOnboardedError } from "@/lib/api";
@@ -125,11 +126,7 @@ function Sidebar({
 function Logo({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex items-center gap-2.5 px-1 py-1">
-      <span
-        className="h-6 w-6 shrink-0 rotate-45 rounded-[6px]"
-        style={{ background: "var(--accent)" }}
-        aria-hidden="true"
-      />
+      <img src={logo} alt="" className="h-7 w-7 shrink-0" aria-hidden="true" />
       <span className="sidebar-label" data-collapsed={collapsed}>
         <span
           className="block font-serif text-base font-semibold tracking-tight"
@@ -206,7 +203,7 @@ function ProfileLink({ collapsed }: { collapsed: boolean }) {
   return (
     <li>
       <NavLink
-        to="/settings"
+        to="/profile"
         title={collapsed ? label : undefined}
         className={navRowClassName(collapsed)}
         style={{ color: profile ? "var(--fg-muted)" : "var(--accent)", fontWeight: 500 }}

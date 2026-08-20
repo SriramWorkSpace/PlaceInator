@@ -370,19 +370,21 @@ async def test_notifications_requires_onboarding_first(client):
     assert response.status_code == 412
 
 
-async def test_notifications_qualify_and_clear_once_seen(client, monkeypatch):
+async def test_notifications_qualify_and_clear_once_seen(client):
     """Real semantic scores from score_match's weighted sum are typically
-    well below NOTIFICATION_THRESHOLD for a short test JD/resume pair, so
-    this pins the threshold to 0.0 -- deterministic, and still exercises the
-    real list_notifications -> rank_jobs -> match_resume_to_job path rather
-    than mocking any of it away."""
-    import placeinator.jobs.service as jobs_service
-
-    monkeypatch.setattr(jobs_service, "NOTIFICATION_THRESHOLD", 0.0)
-
+    well below the default notification_threshold for a short test JD/resume
+    pair, so this onboards with the threshold pinned to 0.0 (the real,
+    user-adjustable Preferences field the Settings page writes to) --
+    deterministic, and still exercises the real list_notifications ->
+    rank_jobs -> match_resume_to_job path rather than mocking any of it
+    away."""
     onboarding = await client.put(
         "/api/profile",
-        json={"full_name": "Jane Doe", "email": "jane@example.com"},
+        json={
+            "full_name": "Jane Doe",
+            "email": "jane@example.com",
+            "preferences": {"notification_threshold": 0.0},
+        },
     )
     assert onboarding.status_code == 200
 

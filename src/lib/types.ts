@@ -23,6 +23,9 @@ export interface PreferencesIn {
   accepts_service_bond: boolean;
   max_bond_months: number | null;
   other_restrictions: string | null;
+  /** Minimum overall match score (0..1) for a job to surface as a
+   * personalized notification -- the Settings page's Notifications control. */
+  notification_threshold: number;
 }
 
 export const DEFAULT_PREFERENCES: PreferencesIn = {
@@ -41,6 +44,7 @@ export const DEFAULT_PREFERENCES: PreferencesIn = {
   accepts_service_bond: true,
   max_bond_months: null,
   other_restrictions: null,
+  notification_threshold: 0.6,
 };
 
 export interface ProfileIn {

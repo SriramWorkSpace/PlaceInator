@@ -10,4 +10,5 @@ export { Tailor } from "./Tailor";
 export { Career } from "./Career";
 export { Outreach } from "./Outreach";
 export { Placement } from "./Placement";
+export { Profile } from "./Profile";
 export { Settings } from "./Settings";

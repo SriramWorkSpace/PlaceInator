@@ -1,42 +1,110 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
-import { Button, ErrorText, Field, Select, TextInput } from "@/components/Form";
-import { Page } from "@/components/Page";
 import {
-  extractProfileFromResume,
-  getProfile,
-  NotOnboardedError,
-  putProfile,
-  uploadResume,
-} from "@/lib/api";
-import {
-  DEFAULT_PREFERENCES,
-  SOURCE_FORMATS,
-  type ProfileIn,
-  type ProfileOut,
-  type SourceFormat,
-  type WorkMode,
-} from "@/lib/types";
+  DarkModeIcon,
+  LightModeIcon,
+  LinkIcon,
+  LogoutIcon,
+} from "@/components/icons";
+import { Page, SectionCard } from "@/components/Page";
+import { Switch } from "@/components/ui/switch";
+import { getProfile, getStatus, NotOnboardedError, putProfile } from "@/lib/api";
+import { PALETTES, usePalette, type Palette } from "@/lib/palette";
+import { useTheme } from "@/lib/theme";
+import { DEFAULT_PREFERENCES, type ProfileIn } from "@/lib/types";
 
-const EMPTY_FORM: ProfileIn = {
-  full_name: "",
-  email: "",
-  phone: null,
-  college: null,
-  department: null,
-  student_id: null,
-  name_aliases: [],
-  preferences: DEFAULT_PREFERENCES,
+const PALETTE_LABELS: Record<Palette, string> = {
+  violet: "Violet",
+  ocean: "Ocean",
+  meadow: "Meadow",
+  terracotta: "Terracotta",
 };
 
-const FORMAT_BY_EXTENSION: Record<string, SourceFormat> = {
-  pdf: "pdf",
-  docx: "docx",
-  tex: "tex",
+// Mirrors each palette's light-mode --accent value in styles/index.css --
+// a display-only preview swatch, so it intentionally doesn't try to read the
+// live custom property (which would require the palette to already be
+// applied to compute). Keep in sync with index.css if either changes.
+const PALETTE_SWATCH: Record<Palette, string> = {
+  violet: "#5d4a9e",
+  ocean: "#3a6ea8",
+  meadow: "#3f7d4f",
+  terracotta: "#b1592f",
 };
 
 export function Settings() {
+  return (
+    <Page title="Settings" description="Appearance, notifications, and connected accounts.">
+      <div className="max-w-2xl space-y-6">
+        <AppearanceSection />
+        <NotificationsSection />
+        <ConnectedAccountsSection />
+        <AccountSection />
+      </div>
+    </Page>
+  );
+}
+
+function AppearanceSection() {
+  const { theme, toggleTheme } = useTheme();
+  const { palette, setPalette } = usePalette();
+  const isDark = theme === "dark";
+
+  return (
+    <SectionCard eyebrow="Appearance" eyebrowColor="var(--section-dashboard)" title="Theme & color">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Dark mode</p>
+            <p className="mt-0.5 text-xs" style={{ color: "var(--fg-subtle)" }}>
+              {isDark ? "Currently dark." : "Currently light."} Follows your system until you choose
+              one here.
+            </p>
+          </div>
+          <Switch
+            value={isDark}
+            onToggle={(event) => toggleTheme({ x: event.clientX, y: event.clientY })}
+            iconOn={<DarkModeIcon width={14} height={14} />}
+            iconOff={<LightModeIcon width={14} height={14} />}
+          />
+        </div>
+
+        <div>
+          <p className="text-sm font-medium">Accent color</p>
+          <p className="mt-0.5 text-xs" style={{ color: "var(--fg-subtle)" }}>
+            Changes the accent used for buttons, active nav, and badges. Everything else about the
+            look stays the same.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {PALETTES.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPalette(p)}
+                aria-label={`${PALETTE_LABELS[p]} accent`}
+                aria-pressed={palette === p}
+                title={PALETTE_LABELS[p]}
+                className="palette-swatch h-9 w-9 rounded-full border-2"
+                style={{
+                  background: PALETTE_SWATCH[p],
+                  borderColor: palette === p ? "var(--fg)" : "transparent",
+                  transform: palette === p ? "scale(1.1)" : "scale(1)",
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+/** Writes to the same Preferences.notification_threshold field
+ * placeinator.jobs.service.list_notifications reads -- the Dashboard's
+ * notification panel and this slider share one real source of truth, not a
+ * cosmetic control. */
+function NotificationsSection() {
   const queryClient = useQueryClient();
   const { data, isPending } = useQuery({
     queryKey: ["profile"],
@@ -44,251 +112,155 @@ export function Settings() {
     retry: (count, err) => !(err instanceof NotOnboardedError) && count < 2,
   });
 
-  const [form, setForm] = useState<ProfileIn | null>(null);
-  // Seed local form state once from the server response; afterwards the form
-  // is the source of truth until the user saves.
-  const active = form ?? (data ? toForm(data) : EMPTY_FORM);
-
-  // Onboarding-only: a resume staged here is uploaded as the primary resume
-  // right after the profile itself is saved.
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeFormat, setResumeFormat] = useState<SourceFormat>("pdf");
-  const fileInput = useRef<HTMLInputElement>(null);
-
-  const extractMutation = useMutation({
-    mutationFn: extractProfileFromResume,
-    onSuccess: (fields) => {
-      // Only fill fields the user hasn't already typed something into --
-      // autofill should never clobber a manual edit.
-      setForm({
-        ...active,
-        full_name: active.full_name || fields.full_name || "",
-        email: active.email || fields.email || "",
-        phone: active.phone || fields.phone,
-        college: active.college || fields.college,
-        department: active.department || fields.department,
-      });
-    },
-  });
-
-  const uploadPrimaryMutation = useMutation({
-    mutationFn: uploadResume,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["resumes"] });
-    },
-  });
+  const [localThreshold, setLocalThreshold] = useState<number | null>(null);
+  const active =
+    localThreshold ??
+    data?.preferences?.notification_threshold ??
+    DEFAULT_PREFERENCES.notification_threshold;
+  const saveTimer = useRef<number | null>(null);
 
   const mutation = useMutation({
     mutationFn: putProfile,
-    onSuccess: async (profile) => {
+    onSuccess: (profile) => {
       queryClient.setQueryData(["profile"], profile);
-      setForm(null);
-
-      if (resumeFile) {
-        await uploadPrimaryMutation.mutateAsync({
-          label: "Primary Resume",
-          sourceFormat: resumeFormat,
-          isPrimary: true,
-          file: resumeFile,
-        });
-        setResumeFile(null);
-        if (fileInput.current) fileInput.current.value = "";
-      }
+      queryClient.invalidateQueries({ queryKey: ["jobs", "notifications"] });
+      // Server data is now authoritative again; drop the local override so a
+      // later external change to preferences (e.g. edited from the Profile
+      // page) isn't shadowed by a stale drag value forever.
+      setLocalThreshold(null);
     },
   });
 
-  if (isPending) {
-    return (
-      <Page title="Profile & Preferences" description="Profile, preferences, and employment constraints.">
-        <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
-          Loading…
-        </p>
-      </Page>
-    );
-  }
-
-  const saving = mutation.isPending || uploadPrimaryMutation.isPending;
+  const scheduleSave = (value: number) => {
+    setLocalThreshold(value);
+    if (!data) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    // Debounced, not saved on every tick while dragging -- a slider fires
+    // dozens of change events per drag, and only the settled value matters.
+    saveTimer.current = window.setTimeout(() => {
+      const payload: ProfileIn = {
+        full_name: data.full_name,
+        email: data.email,
+        phone: data.phone,
+        college: data.college,
+        department: data.department,
+        student_id: data.student_id,
+        name_aliases: data.name_aliases,
+        preferences: { ...(data.preferences ?? DEFAULT_PREFERENCES), notification_threshold: value },
+      };
+      mutation.mutate(payload);
+    }, 400);
+  };
 
   return (
-    <Page
-      title="Profile & Preferences"
-      description={
-        data
-          ? "Your profile is complete. Anything here can be edited and re-saved."
-          : "Complete onboarding to start adding resumes and matching against jobs."
-      }
-    >
-      <form
-        className="max-w-xl space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          mutation.mutate(active);
-        }}
-      >
-        {!data && (
-          <div
-            className="card rounded-[var(--radius-panel)] border p-4"
-            style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
-          >
-            <Field
-              label="Autofill from a resume (optional)"
-              hint="Upload a resume to prefill the fields below. It's saved as your primary resume once you complete onboarding."
-            >
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-48 flex-1">
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept=".pdf,.docx,.tex"
-                    className="w-full text-sm"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] ?? null;
-                      setResumeFile(file);
-                      if (!file) return;
-                      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-                      const format = FORMAT_BY_EXTENSION[ext] ?? "pdf";
-                      setResumeFormat(format);
-                      extractMutation.mutate({ sourceFormat: format, file });
-                    }}
-                  />
-                </div>
-                <div className="w-28">
-                  <Select
-                    value={resumeFormat}
-                    onChange={(e) => setResumeFormat(e.target.value as SourceFormat)}
-                  >
-                    {SOURCE_FORMATS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-              </div>
-            </Field>
-            {extractMutation.isPending && (
-              <p className="mt-2 text-xs" style={{ color: "var(--fg-subtle)" }}>
-                Reading resume…
-              </p>
-            )}
-            {extractMutation.isError && (
-              <div className="mt-2">
-                <ErrorText onDismiss={() => extractMutation.reset()}>
-                  {(extractMutation.error as Error).message}
-                </ErrorText>
-              </div>
-            )}
-          </div>
-        )}
-
-        <Field label="Full name">
-          <TextInput
-            required
-            value={active.full_name}
-            onChange={(e) => setForm({ ...active, full_name: e.target.value })}
-          />
-        </Field>
-
-        <Field label="Email">
-          <TextInput
-            type="email"
-            required
-            value={active.email}
-            onChange={(e) => setForm({ ...active, email: e.target.value })}
-          />
-        </Field>
-
-        <Field label="College" hint="Used to help identify you in placement documents (spec §7).">
-          <TextInput
-            value={active.college ?? ""}
-            onChange={(e) => setForm({ ...active, college: e.target.value || null })}
-          />
-        </Field>
-
-        <Field label="Target roles" hint="Comma-separated, e.g. Backend Engineer, SDE">
-          <TextInput
-            value={active.preferences.target_roles.join(", ")}
-            onChange={(e) =>
-              setForm({
-                ...active,
-                preferences: {
-                  ...active.preferences,
-                  target_roles: splitList(e.target.value),
-                },
-              })
-            }
-          />
-        </Field>
-
-        <Field label="Work mode">
-          <Select
-            value={active.preferences.work_mode}
-            onChange={(e) =>
-              setForm({
-                ...active,
-                preferences: { ...active.preferences, work_mode: e.target.value as WorkMode },
-              })
-            }
-          >
-            <option value="any">Any</option>
-            <option value="remote">Remote</option>
-            <option value="hybrid">Hybrid</option>
-            <option value="onsite">On-site</option>
-          </Select>
-        </Field>
-
-        <Field label="Minimum acceptable salary" hint="Jobs below this are excluded, not just ranked lower.">
-          <TextInput
-            type="number"
+    <SectionCard eyebrow="Notifications" eyebrowColor="var(--section-jobs)" title="Match threshold">
+      {!data && !isPending ? (
+        <p className="text-sm" style={{ color: "var(--fg-subtle)" }}>
+          Complete your{" "}
+          <Link to="/profile" className="underline">
+            profile
+          </Link>{" "}
+          first — notification preferences need an onboarded profile to attach to.
+        </p>
+      ) : (
+        <div className="max-w-sm">
+          <p className="text-sm" style={{ color: "var(--fg-muted)" }}>
+            Only notify me about jobs that score at least{" "}
+            <span className="font-semibold" style={{ color: "var(--fg)" }}>
+              {Math.round(active * 100)}%
+            </span>{" "}
+            match.
+          </p>
+          <input
+            type="range"
             min={0}
-            value={active.preferences.min_salary ?? ""}
-            onChange={(e) =>
-              setForm({
-                ...active,
-                preferences: {
-                  ...active.preferences,
-                  min_salary: e.target.value ? Number(e.target.value) : null,
-                },
-              })
-            }
+            max={100}
+            step={5}
+            value={Math.round(active * 100)}
+            disabled={!data}
+            onChange={(e) => scheduleSave(Number(e.target.value) / 100)}
+            className="mt-3 w-full"
+            style={{ accentColor: "var(--accent)" }}
           />
-        </Field>
-
-        {(mutation.isError || uploadPrimaryMutation.isError) && (
-          <ErrorText
-            onDismiss={() => {
-              mutation.reset();
-              uploadPrimaryMutation.reset();
-            }}
-          >
-            {((mutation.error ?? uploadPrimaryMutation.error) as Error).message}
-          </ErrorText>
-        )}
-
-        <Button type="submit" disabled={saving}>
-          {saving ? "Saving…" : data ? "Save changes" : "Complete onboarding"}
-        </Button>
-      </form>
-    </Page>
+          <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
+            {mutation.isPending ? "Saving…" : " "}
+          </p>
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
-function splitList(value: string): string[] {
-  return value
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+/**
+ * Honest about what's real: Google OAuth is M4 scope and isn't wired up
+ * yet, so this never pretends a "Connect" button would do anything. Indeed/
+ * LinkedIn/Naukri are already usable from the Jobs page without connecting
+ * an account at all -- they're search targets, not accounts you sign into
+ * from here -- so that distinction is spelled out rather than left implicit.
+ */
+function ConnectedAccountsSection() {
+  return (
+    <SectionCard
+      eyebrow="Connected accounts"
+      eyebrowColor="var(--section-placement)"
+      title="Google, and job boards"
+    >
+      <div className="space-y-4">
+        <div
+          className="flex items-start justify-between gap-4 rounded-[var(--radius-input)] border p-3"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div className="flex items-start gap-3">
+            <LinkIcon width={18} height={18} style={{ color: "var(--fg-subtle)" }} />
+            <div>
+              <p className="text-sm font-medium">Google (Gmail & Calendar)</p>
+              <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
+                Powers placement email monitoring and interview scheduling (spec §7).
+              </p>
+            </div>
+          </div>
+          <span
+            className="shrink-0 rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
+            style={{ background: "var(--canvas-inset)", color: "var(--fg-subtle)" }}
+          >
+            Coming in M4
+          </span>
+        </div>
+
+        <p className="text-xs" style={{ color: "var(--fg-subtle)" }}>
+          Indeed, LinkedIn, and Naukri don't need a connected account here — searching them from
+          the{" "}
+          <Link to="/jobs" className="underline">
+            Jobs page
+          </Link>{" "}
+          works without signing in, within what each site allows.
+        </p>
+      </div>
+    </SectionCard>
+  );
 }
 
-function toForm(profile: ProfileOut): ProfileIn {
-  return {
-    full_name: profile.full_name,
-    email: profile.email,
-    phone: profile.phone,
-    college: profile.college,
-    department: profile.department,
-    student_id: profile.student_id,
-    name_aliases: profile.name_aliases,
-    preferences: profile.preferences ?? DEFAULT_PREFERENCES,
-  };
+/** No account system exists in a local single-user app -- said plainly
+ * rather than shipping a "Log out" button with nothing behind it. */
+function AccountSection() {
+  const { data } = useQuery({ queryKey: ["status"], queryFn: getStatus });
+
+  return (
+    <SectionCard eyebrow="Account" eyebrowColor="var(--fg-muted)" title="Local-only, no login">
+      <div className="flex items-start gap-3">
+        <LogoutIcon width={18} height={18} style={{ color: "var(--fg-subtle)" }} />
+        <div className="text-sm" style={{ color: "var(--fg-muted)" }}>
+          <p>
+            PlaceInator runs entirely on this machine for one user. There's no account system, so
+            there's nothing to log into or out of, and no password to manage.
+          </p>
+          {data && (
+            <p className="selectable mt-2 text-xs" style={{ color: "var(--fg-subtle)" }}>
+              Your data is stored locally at <span className="font-mono">{data.data_dir}</span>.
+            </p>
+          )}
+        </div>
+      </div>
+    </SectionCard>
+  );
 }

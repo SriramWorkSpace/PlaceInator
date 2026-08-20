@@ -46,12 +46,13 @@ class JobNotFoundError(ValueError):
     pass
 
 
-# Minimum overall_score for a job to surface as a personalized notification
-# (spec §2: "opportunities that meet their preferences and match threshold").
-# Deliberately separate from ranking, which shows every non-filtered job
-# regardless of score -- notifications are the subset worth interrupting the
-# user for. Tunable without a code change once config/scoring.toml exists,
-# same as placeinator.matching.scoring.COMPONENT_WEIGHTS.
+# Fallback minimum overall_score for a job to surface as a personalized
+# notification (spec §2: "opportunities that meet their preferences and
+# match threshold"), used only if a profile somehow has no Preferences row
+# yet -- the real, user-adjustable value lives at
+# Preferences.notification_threshold (Settings page). Deliberately separate
+# from ranking, which shows every non-filtered job regardless of score --
+# notifications are the subset worth interrupting the user for.
 NOTIFICATION_THRESHOLD = 0.6
 
 
@@ -195,11 +196,11 @@ def rank_jobs(session: Session, profile: Profile) -> list[JobRanking]:
     return rankings
 
 
-def _qualifies_for_notification(ranking: JobRanking) -> bool:
+def _qualifies_for_notification(ranking: JobRanking, threshold: float) -> bool:
     return (
         ranking.filtered_out_reason is None
         and ranking.semantic_score is not None
-        and ranking.overall_score >= NOTIFICATION_THRESHOLD
+        and ranking.overall_score >= threshold
     )
 
 
@@ -207,13 +208,20 @@ def list_notifications(session: Session, profile: Profile) -> list[JobRanking]:
     """Jobs that qualify as a personalized notification (spec §2) and haven't
     been marked seen yet: passes hard filters, has a semantic score against
     the primary resume (no primary resume means no notifications -- there is
-    nothing to say "this matches you" about), and clears
-    NOTIFICATION_THRESHOLD. Sorted the same as rank_jobs, best first.
+    nothing to say "this matches you" about), and clears the user's
+    notification_threshold (Settings page; falls back to
+    NOTIFICATION_THRESHOLD if preferences somehow don't exist yet). Sorted
+    the same as rank_jobs, best first.
     """
+    threshold = (
+        profile.preferences.notification_threshold
+        if profile.preferences is not None
+        else NOTIFICATION_THRESHOLD
+    )
     return [
         r
         for r in rank_jobs(session, profile)
-        if _qualifies_for_notification(r) and r.job.notification_seen_at is None
+        if _qualifies_for_notification(r, threshold) and r.job.notification_seen_at is None
     ]
 
 

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { Button, ErrorText, Field, Select, TextArea, TextInput } from "@/components/Form";
 import { EmptyState, Page } from "@/components/Page";
@@ -327,8 +328,11 @@ export function Jobs() {
 
       {data && !data.ranked && (
         <p className="mt-6 text-xs" style={{ color: "var(--fg-subtle)" }}>
-          Complete your profile on the Settings page to get a personalized ranking and filter
-          explanations here.
+          Complete your{" "}
+          <Link to="/profile" className="underline">
+            profile
+          </Link>{" "}
+          to get a personalized ranking and filter explanations here.
         </p>
       )}
 

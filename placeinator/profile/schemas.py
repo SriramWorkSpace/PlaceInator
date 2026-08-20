@@ -32,6 +32,10 @@ class PreferencesIn(BaseModel):
     max_bond_months: int | None = Field(default=None, ge=0)
     other_restrictions: str | None = None
 
+    # Minimum overall_score (0..1) for a job to surface as a personalized
+    # notification (spec §2) -- the Settings page's Notifications control.
+    notification_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+
 
 class PreferencesOut(PreferencesIn):
     pass

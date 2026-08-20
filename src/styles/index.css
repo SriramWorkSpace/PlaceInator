@@ -163,6 +163,69 @@
   --shadow-card: 0 4px 12px -4px rgb(0 0 0 / 0.45), 0 1px 3px -1px rgb(0 0 0 / 0.3);
 }
 
+/* ------------------------------------------------------------------ *
+ * Alternate accent palettes (Settings > Appearance, src/lib/palette.ts).
+ * Swap only --accent/--accent-fg/--accent-subtle -- every other token
+ * (canvas, borders, section colors, fonts, radii) stays fixed, so this is a
+ * deliberately narrow choice layered on the one "studio" system, not a
+ * second design language to maintain. "violet" is the default already
+ * defined above with no [data-palette] attribute needed; these three are
+ * the alternatives. Each needs both a light and a dark set, mirroring
+ * exactly how the base --accent is defined twice above (prefers-color-
+ * scheme block + explicit [data-theme="dark"] override), so a palette
+ * choice survives both the system-theme and the manual-toggle path.
+ * ------------------------------------------------------------------ */
+
+:root[data-palette="ocean"] {
+  --accent: #3a6ea8;
+  --accent-fg: #ffffff;
+  --accent-subtle: #e1ecf8;
+}
+:root[data-palette="meadow"] {
+  --accent: #3f7d4f;
+  --accent-fg: #ffffff;
+  --accent-subtle: #e2f0e4;
+}
+:root[data-palette="terracotta"] {
+  --accent: #b1592f;
+  --accent-fg: #ffffff;
+  --accent-subtle: #f6e6dd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-palette="ocean"]:not([data-theme="light"]) {
+    --accent: #8ec2f2;
+    --accent-fg: #12202e;
+    --accent-subtle: #1c2e42;
+  }
+  :root[data-palette="meadow"]:not([data-theme="light"]) {
+    --accent: #8fd6a3;
+    --accent-fg: #122417;
+    --accent-subtle: #1c3524;
+  }
+  :root[data-palette="terracotta"]:not([data-theme="light"]) {
+    --accent: #e8a37f;
+    --accent-fg: #2e1a10;
+    --accent-subtle: #3a2418;
+  }
+}
+
+:root[data-theme="dark"][data-palette="ocean"] {
+  --accent: #8ec2f2;
+  --accent-fg: #12202e;
+  --accent-subtle: #1c2e42;
+}
+:root[data-theme="dark"][data-palette="meadow"] {
+  --accent: #8fd6a3;
+  --accent-fg: #122417;
+  --accent-subtle: #1c3524;
+}
+:root[data-theme="dark"][data-palette="terracotta"] {
+  --accent: #e8a37f;
+  --accent-fg: #2e1a10;
+  --accent-subtle: #3a2418;
+}
+
 html,
 body,
 #root {
@@ -415,6 +478,21 @@ textarea,
   }
   .card-hover:hover {
     transform: none;
+  }
+}
+
+/* Settings > Appearance's accent-palette swatches -- selection state reads
+   through the border-color transition alone under reduced motion, same
+   treatment as .card-hover above. */
+.palette-swatch {
+  transition:
+    transform 150ms var(--ease-out),
+    border-color 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .palette-swatch {
+    transition: border-color 150ms ease;
+    transform: none !important;
   }
 }
 

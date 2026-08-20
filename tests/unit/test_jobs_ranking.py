@@ -41,23 +41,31 @@ def test_overall_score_combines_semantic_and_soft_preference():
 
 def test_filtered_job_never_qualifies_for_notification():
     ranking = _ranking(filtered_out_reason="below minimum salary", semantic_score=1.0)
-    assert not _qualifies_for_notification(ranking)
+    assert not _qualifies_for_notification(ranking, NOTIFICATION_THRESHOLD)
 
 
 def test_no_semantic_score_never_qualifies_for_notification():
     """No primary resume means no semantic score -- there is nothing to say
     "this matches you" about, so it can't be a personalized notification."""
     ranking = _ranking(semantic_score=None, soft_preference_score=1.0)
-    assert not _qualifies_for_notification(ranking)
+    assert not _qualifies_for_notification(ranking, NOTIFICATION_THRESHOLD)
 
 
 def test_score_below_threshold_does_not_qualify():
     ranking = _ranking(semantic_score=NOTIFICATION_THRESHOLD - 0.3, soft_preference_score=0.0)
     assert ranking.overall_score < NOTIFICATION_THRESHOLD
-    assert not _qualifies_for_notification(ranking)
+    assert not _qualifies_for_notification(ranking, NOTIFICATION_THRESHOLD)
 
 
 def test_score_at_or_above_threshold_qualifies():
     ranking = _ranking(semantic_score=1.0, soft_preference_score=1.0)
     assert ranking.overall_score >= NOTIFICATION_THRESHOLD
-    assert _qualifies_for_notification(ranking)
+    assert _qualifies_for_notification(ranking, NOTIFICATION_THRESHOLD)
+
+
+def test_custom_threshold_is_honored():
+    """A user-lowered threshold (Settings page) must actually change the
+    verdict, not just the module-level fallback constant."""
+    ranking = _ranking(semantic_score=0.5, soft_preference_score=0.5)
+    assert not _qualifies_for_notification(ranking, 0.9)
+    assert _qualifies_for_notification(ranking, 0.3)

@@ -3,19 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <title>PlaceInator</title>
     <script>
-      // Runs before first paint so a returning user's saved theme choice
-      // (see src/lib/theme.ts) never flashes the wrong theme on load.
+      // Runs before first paint so a returning user's saved theme/palette
+      // choice (see src/lib/theme.ts, src/lib/palette.ts) never flashes the
+      // default on load.
       (function () {
         try {
-          var saved = localStorage.getItem("placeinator-theme");
-          if (saved === "light" || saved === "dark") {
-            document.documentElement.dataset.theme = saved;
+          var theme = localStorage.getItem("placeinator-theme");
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.dataset.theme = theme;
+          }
+          var palette = localStorage.getItem("placeinator-palette");
+          if (palette && palette !== "violet") {
+            document.documentElement.dataset.palette = palette;
           }
         } catch (_e) {
           // localStorage unavailable; fall back to the prefers-color-scheme
-          // media query already handled in styles/index.css.
+          // media query and the default palette already handled in
+          // styles/index.css.
         }
       })();
     </script>

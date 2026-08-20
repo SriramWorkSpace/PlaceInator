@@ -5,6 +5,7 @@ import {
   CheckIcon,
   GroupsIcon,
   HomeIcon,
+  PersonIcon,
   ResumeDocIcon,
   SearchIcon,
   SettingsIcon,
@@ -30,6 +31,13 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/placement", label: "Placement", icon: GroupsIcon, color: "--section-placement" },
 ];
 
+export const PROFILE_ITEM: NavItem = {
+  path: "/profile",
+  label: "Profile",
+  icon: PersonIcon,
+  color: "--fg-muted",
+};
+
 export const SETTINGS_ITEM: NavItem = {
   path: "/settings",
   label: "Settings",
@@ -41,7 +49,7 @@ export const SETTINGS_ITEM: NavItem = {
  * so every route gets a matching "SECTION" label and accent color from one
  * source of truth instead of passing them in at each call site. */
 export function navItemForPath(pathname: string): NavItem | undefined {
-  return [...NAV_ITEMS, SETTINGS_ITEM].find((i) =>
+  return [...NAV_ITEMS, PROFILE_ITEM, SETTINGS_ITEM].find((i) =>
     i.path === "/" ? pathname === "/" : pathname.startsWith(i.path),
   );
 }

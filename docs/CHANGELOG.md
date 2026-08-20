@@ -9,6 +9,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Real logo**, replacing the placeholder rotated square in the sidebar
+  and as the browser-tab favicon (`src/assets/logo.png`,
+  `public/favicon.png`).
+- **Fixed a real cross-component desync bug** in `useTheme`/`usePalette`:
+  both are now called from two places at once (the sidebar's floating
+  toggle and the new Settings > Appearance section), and the previous
+  per-component `useState` meant toggling in one would silently leave the
+  other showing a stale switch position while the DOM itself had already
+  changed correctly. Rewritten as a shared module-level store via
+  `useSyncExternalStore`, so every subscriber agrees immediately regardless
+  of which one triggered the change.
+- **Split Profile out of Settings, and gave Settings real content.** The
+  sidebar's "Profile" link previously just routed to `/settings` — personal
+  info and career preferences (spec §1) now live at their own `/profile`
+  route (`src/routes/Profile.tsx`), and `/settings` is a genuine account
+  page: Appearance (dark mode plus four accent-color palettes —
+  `src/lib/palette.ts`, `--accent`/`--accent-fg`/`--accent-subtle` swapped
+  via `[data-palette]`, applied before first paint the same way theme is),
+  Notifications (a real, working match-threshold slider wired to the new
+  `Preferences.notification_threshold` column — the same field
+  `list_notifications` reads, not a cosmetic control), Connected accounts,
+  and Account. The last two are deliberately honest rather than
+  decorative: Google OAuth is real M4 scope and says so instead of a dead
+  "Connect" button; there is no login system in a local single-user app, so
+  the Account section explains that plainly instead of shipping a "Log out"
+  button with nothing behind it.
 - **`indeed`, `linkedin`, `naukri` job source adapters, completing M2.**
   Each verified live before any parsing code was written:
   - `indeed`: real coverage. The search-results page embeds job data as JSON
