@@ -1,176 +1,133 @@
 # Build Guide
 
-A step-by-step account of how PlaceInator was actually built — what was built in
-what order, why each major technical choice was made, and what real problems came
-up along the way. This is a narrative companion to the other docs, not a
-replacement for them:
+How PlaceInator was actually built: what came first, why each major choice was
+made, and what real problems came up along the way. This is a story, not a
+reference — for those, see:
 
-- [specification.md](./specification.md) — what the app is supposed to do
-- [architecture.md](./architecture.md) — how it's built, as a reference
-- [decisions.md](./decisions.md) — the ADRs, as standalone durable records
+- [specification.md](./specification.md) — what the app should do
+- [architecture.md](./architecture.md) — how it's built
+- [decisions.md](./decisions.md) — the ADRs (formal decision records)
 - [roadmap.md](./roadmap.md) — milestone status
-- [CHANGELOG.md](./CHANGELOG.md) — chronological, entry-per-change
+- [CHANGELOG.md](./CHANGELOG.md) — every change, in order
 
-This file exists because none of those answer "how did this get built, in what
-order, and why" as a single readable story. Every claim below is grounded in the
-ADRs, the CHANGELOG, or work verified live during development — nothing here is
-aspirational or invented.
+Everything below is grounded in those docs or in work verified live during
+development. Nothing here is guessed or aspirational.
 
-## Development approach
+## Two rules that shaped every milestone
 
-Two rules shaped every milestone, stated once here rather than repeated at each
-step below:
+1. **Verify before coding.** Before writing code against an assumption —
+   "`fastembed` won't pull in PyTorch," "this site's `robots.txt` allows this
+   page," "`pylatexenc` structures its output this way" — that assumption was
+   checked against the real thing first.
+2. **Compiling isn't done. Proving it works is done.** Every milestone has a
+   "done when" test against the real, running app — not just a green test
+   suite.
 
-1. **Verify before coding.** Every non-trivial technical assumption — whether
-   `fastembed` actually installs without pulling in PyTorch, how a real job
-   board's `robots.txt` actually behaves, what `pylatexenc` actually returns for
-   a real `.tex` file — was checked against the real thing before code was
-   written against it, not assumed from documentation or memory. ADR 0005's
-   "Verification" section and `placeinator/latex/parsing.py`'s module docstring
-   are the two most visible examples, but the discipline runs throughout.
-2. **A feature isn't done until it's proven, not just compiled.** "Done when"
-   criteria appear throughout `roadmap.md` for exactly this reason — M1's bar is
-   "add 3 resumes → paste a JD → get a ranked recommendation, verified live
-   through the actual UI, not just the test suite." M0's Tauri shell was verified
-   the same way: a real window, a real close event, a real check for orphaned
-   processes, not just `cargo check` passing.
+## What PlaceInator is
 
-## Step 0 — What PlaceInator is
+A desktop app with three parts:
 
-A local-first placement assistant: a Tauri v2 desktop shell (Rust) hosting a
-React/TypeScript UI, talking to a Python FastAPI sidecar over authenticated
-loopback HTTP. The sidecar owns SQLite, all ML (embeddings), all document
-parsing, and all external integration work. See ADR 0001 for why this shape was
-chosen over a single-process alternative (PySide6, Electron+Python, Flutter
-desktop+Python).
+- A **Tauri (Rust) shell** — the actual window
+- A **React + TypeScript UI** running inside it
+- A **Python sidecar** (FastAPI), talking to the UI over a local, authenticated
+  HTTP connection
 
-The load-bearing constraint across the whole project is **ADR 0002:
-deterministic engine, no LLM generation.** Nothing in this app calls an LLM, ever
-— not for matching, not for tailoring, not for outreach drafting, not for
-placement-document extraction. Every one of those spec features that *reads* as
-generative is instead implemented deterministically:
+The sidecar does all the heavy lifting: it owns the database, runs the ML
+model, parses documents, and talks to any external services. See ADR 0001 for
+why this split (rather than one single-language app) was chosen.
 
-| Spec feature | How it's actually done | Milestone |
+**The one rule that shapes everything else: no LLM, anywhere.** Not for
+matching resumes to jobs, not for tailoring a resume, not for drafting outreach
+emails. Every feature that *sounds* like it needs a language model is instead
+built as a deterministic, rule-based system:
+
+| Feature | How it actually works | Milestone |
 |---|---|---|
-| Resume-job matching | Local sentence embeddings + curated skill taxonomy | M1 |
-| Resume tailoring | Reorders/splices the user's own source; never rewrites | M3 |
-| Cold outreach (planned) | Jinja2 templates filled from match evidence | M5 |
-| Placement extraction (planned) | Keyword rules + fuzzy header matching | M4 |
+| Resume-job matching | Sentence embeddings (math, not text generation) + a hand-built skill list | M1 |
+| Resume tailoring | Reorders the user's own text; never writes new sentences | M3 |
+| Outreach emails (planned) | Fill-in-the-blank templates, not generated | M5 |
+| Reading placement emails (planned) | Keyword and pattern matching | M4 |
 
-This isn't a limitation worked around after the fact — it's the starting
-constraint every milestone below was designed against.
+This was decided up front (ADR 0002), not discovered as a limitation later.
 
-## Step 1 — M0: Foundation
+## M0 — Foundation
 
-**Built:** the Python sidecar (handshake protocol, bearer-token auth), the full
-ORM schema (9 tables, Alembic-managed from the first migration), the React
-frontend shell (seven routes, typed API client), CI, and — later, after the
-initial pass — the Tauri desktop shell itself.
+**Built:** the Python sidecar, the database schema, the React app shell, CI,
+and — much later — the Tauri desktop window itself.
 
-**The handshake protocol** is the one piece of cross-language contract the whole
-app depends on, so it's worth stating precisely: the sidecar binds its own
-ephemeral loopback socket (binding in Python, not letting `uvicorn` do it, is
-what makes the port knowable *before* the server starts accepting), then prints
-exactly one line to stdout:
+**The handshake.** The sidecar picks its own open port, then prints one line:
 
 ```
 PLACEINATOR_READY {"port": 51234, "token": "..."}
 ```
 
-Every other route requires that bearer token; `/health` is the one deliberate
-exception, since the shell needs something to poll before it has a token to
-authenticate with. `src/lib/api.ts`'s `connection()` falls back to
-`VITE_SIDECAR_PORT`/`VITE_SIDECAR_TOKEN` env vars when there's no Tauri shell at
-all — which is what made the frontend fully developable *before* a Rust
-toolchain was even installed, months before the desktop shell itself was built.
+The Rust shell reads that line and hands the port + token to the UI. Every API
+route except `/health` requires that token — `/health` stays open because the
+shell needs *something* to check before it has a token to prove who it is.
 
-**The Tauri shell came much later than the rest of M0**, blocked for most of the
-project on installing Rust + MSVC Build Tools. Two real environment problems
-surfaced getting the toolchain working, both worth knowing about since neither
-produces an obvious error message:
+Before the desktop shell existed, the frontend could still run on its own
+(pointed at a manually-started sidecar via two environment variables) — which
+is what let frontend work continue for months before Rust was even installed.
 
-- Git for Windows ships its own `link.exe` (a coreutils hard-link utility) that
-  shadowed the real MSVC linker on `PATH`. The failure mode — `"extra operand ...
-  Try 'link --help'"` — is coreutils' error format, easy to mistake for an MSVC
-  problem.
-- A very new Visual Studio release wasn't recognized by the installed Rust
-  toolchain's bundled detection (neither `rustup`'s C++-prerequisite check nor
-  `rustc`'s own MSVC auto-detection), confirmed independently via `vswhere`,
-  which found a complete, correct installation the other two tools missed.
+**Getting Rust working was the hard part**, and it wasn't Rust's fault — two
+environment issues, both easy to misdiagnose:
 
-Both were fixed with an explicit, per-user `.cargo/config.toml` (machine-specific,
-never committed) pinning the real linker/compiler paths and the `LIB`/`INCLUDE`
-search paths `vcvarsall.bat` would normally set. Full account in ADR 0001's
-"Verified in practice" addendum.
+- Git for Windows installs its own `link.exe` (unrelated to compilers — it's a
+  file-linking utility), and it was shadowing the *real* linker Rust needed.
+  The error it produced looked nothing like a compiler problem.
+- The installed Visual Studio was too new for Rust's own tooling to recognize
+  automatically. Confirmed by checking a different, more reliable detection
+  tool (`vswhere`), which found it fine.
 
-Once the toolchain worked, `src-tauri/` was scaffolded and dev-mode sidecar
-supervision (`src-tauri/src/lib.rs`) was built to implement the handshake
-protocol above from the Rust side: spawn the sidecar, read its stdout for the
-handshake line on a background thread with a bounded timeout (so a sidecar that
-never starts fails loudly instead of hanging the window forever — `std::io`'s
-blocking reads have no deadline of their own), inject
-`window.__PLACEINATOR__` via `initialization_script` before the frontend's first
-script runs, and kill the sidecar when the window closes. Verified against a
-real running window — not a mocked test — including an actual `WM_CLOSE` event
-(not a force-kill) to prove the exit handler itself runs, confirming zero
-orphaned processes survive a close.
+Both were fixed with one config file (kept local to this machine, not
+committed to the repo) that points Rust directly at the real tools instead of
+letting it search and guess.
 
-**Deliberately deferred, not forgotten:** PyInstaller bundling
-(`bundle.externalBin`), a Windows Job-Object-based guarantee that the sidecar
-dies even on a shell crash (today's handler only covers a clean exit), and a
-Rust/Tauri CI job. Bundling the Python sidecar into a standalone executable is
-an independently risky effort — `onnxruntime`'s native libraries are the
-likeliest packaging problem — and bolting it onto the first Rust code the repo
-had ever seen was judged not worth the compounded risk. Same reasoning shows up
-again at M3's PDF-compile deferral below.
+**Once Rust worked**, the shell itself was built: spawn the sidecar, wait for
+its handshake line (with a timeout — so a broken sidecar fails with an error
+instead of freezing the window forever), hand the port/token to the UI, and
+kill the sidecar when the window closes. This was tested for real — a real
+window opened, showing real data, and a real close checked that no leftover
+processes were left running afterward.
 
-## Step 2 — M1: Profile, Resume, and Matching
+**Left for later, on purpose:** packaging the sidecar into a single `.exe`
+(PyInstaller), and a stronger guarantee that the sidecar dies even if the app
+crashes rather than closes normally. Both are separate, riskier pieces of work
+that didn't need to ride along with the first Rust code this project ever had.
 
-**Built:** the onboarding wizard, the resume library (PDF/DOCX/`.tex` upload and
-parsing), the skill taxonomy (`placeinator/skills/taxonomy.json`), the chunking
-pipeline that splits resumes and job descriptions into typed, scorable units,
-and the matching engine that scores a resume against a job with a readable,
-evidence-bearing explanation.
+## M1 — Profile, Resume, and Matching
 
-### Why `fastembed`, not something else
+**Built:** onboarding, the resume library (PDF/DOCX/LaTeX upload), a skill
+list, and the matching engine that scores a resume against a job and explains
+why.
 
-This was the project's single largest technical bet, and it was resolved before
-any matching code was written, not assumed. The reasoning has two separate
-layers — which *kind* of model, and which *library* to run it through — and
-they're worth separating because they get conflated easily.
+### Why fastembed?
 
-**Layer 1 — embedding model vs. a from-scratch architecture (e.g. BiLSTM +
-Attention).** A hand-trained recurrent model (BiLSTM, or BiLSTM+Attention) was
-never a serious option here, for two independent reasons:
+This was the biggest technical bet in the project, so it was checked directly
+before anything was built on top of it. There are really two separate
+questions here, usually mixed together — worth answering separately.
 
-- **The task itself favors pretrained transformer embeddings.** Modern sentence-
-  embedding models (the BERT/MiniLM family, fine-tuned via contrastive learning
-  on massive paired-text corpora — question/answer pairs, similar-sentence
-  pairs, retrieval pairs) have been the state of the art for semantic-similarity
-  tasks since roughly 2019, when they displaced exactly this kind of
-  BiLSTM+Attention approach (InferSent-style models) in the sentence-embedding
-  literature. Self-attention captures bidirectional, long-range context in one
-  parallel pass; a BiLSTM processes the sequence step by step even when run in
-  both directions, and lacks the benefit of that scale of pretraining.
-- **A from-scratch model needs training data and infrastructure this project
-  doesn't have.** There's no labeled corpus of (resume snippet, job requirement,
-  relevance score) triples to train against, and building one is a project in
-  itself. An off-the-shelf pretrained embedding model needs neither — it's used
-  directly, with zero training pipeline, consistent with ADR 0002's
-  deterministic-engine constraint (a trained-from-scratch model would also
-  introduce a whole new axis of non-determinism and maintenance burden a fixed,
-  versioned pretrained model doesn't have).
+**Question 1: what *kind* of model?** Not a custom-trained model (something
+like a BiLSTM + Attention network built from scratch). Two reasons:
 
-**Layer 2 — which library serves that pretrained model (`fastembed` vs.
-`sentence-transformers`).** This is ADR 0005's actual subject, and it's a
-footprint argument, not an accuracy argument — both libraries can serve the same
-underlying model family. `sentence-transformers`, the obvious first choice,
-depends on PyTorch, which adds roughly **2 GB** to the installed size and
-measurable seconds to import time — costs that would dominate this desktop app's
-entire latency and footprint budget, for a model that's itself only ~130 MB.
-`fastembed` runs the same class of model through **ONNX Runtime** instead — no
-PyTorch anywhere in the dependency tree. This was verified directly against the
-real package index before any matching code depended on it:
+- **It would be worse, not just harder.** Pretrained sentence-embedding models
+  (the modern BERT/transformer family) have outperformed BiLSTM-style models
+  at this exact task — comparing the meaning of two pieces of text — for
+  years. This isn't a case of "the fancy option is overkill"; the simpler
+  RNN-based option genuinely does worse here.
+- **There's no data to train one anyway.** Training a model from scratch needs
+  a large labeled dataset of "this resume line matches this job requirement"
+  examples. That dataset doesn't exist for this project, and building one is
+  its own project. A pretrained model needs none of that — it's used as-is.
+
+**Question 2: which library runs that pretrained model?** This is what
+`fastembed` vs. `sentence-transformers` actually comes down to — both can run
+the same kind of model, so it's a size argument, not an accuracy one.
+`sentence-transformers` depends on PyTorch, which adds about **2 GB** to the
+install and real startup delay — a lot to pay for a ~130 MB model in an app
+that's supposed to be light and fast. `fastembed` runs the same class of model
+through ONNX Runtime instead, with no PyTorch anywhere. Checked directly
+before committing to it:
 
 ```
 fastembed 0.8.0
@@ -178,179 +135,130 @@ fastembed 0.8.0
   huggingface_hub 1.28.0, py_rust_stemmers 0.1.8, mmh3 5.2.1
 ```
 
-All wheels, no source builds, no PyTorch. The specific model chosen is
-`BAAI/bge-small-en-v1.5` (384 dimensions) — small enough to meet the latency
-budget (embed a ~40-chunk resume in under 200 ms; rank 500 cached jobs in under
-50 ms, since ranking at that scale is one NumPy matmul, not a vector database)
-while still being a genuinely competitive general-purpose embedding model.
+No PyTorch, no surprises. The model itself is `BAAI/bge-small-en-v1.5` — small
+enough to stay fast (well under the app's own speed targets) while still being
+a solid, general-purpose choice.
 
-**The consequence that shaped everything downstream:** with no LLM to paper over
-vocabulary gaps, `placeinator/skills/taxonomy.json` — the hand-curated
-alias-to-skill map — became the real semantic backbone of matching, gap
-analysis, and filtering. It's a first-class deliverable with its own test suite,
-not a lookup table filled in as an afterthought, and its coverage (89 entries
-seeded, not the ~600 originally scoped) is the project's most honestly-tracked
-known limitation — deliberately left at 89 while M2/M3 proved out the rest of
-the pipeline, rather than expanding it before there was a working product to
-validate it against.
+**One consequence worth calling out:** with no language model to fill in
+vocabulary gaps, the hand-built skill list
+(`placeinator/skills/taxonomy.json`) matters a lot more than it might in an
+LLM-based app — it's the thing doing the "understanding" that a model would
+otherwise do. It currently covers 89 skills, well short of the ~600 originally
+planned, and that's tracked openly as the project's clearest known gap rather
+than something to quietly work around.
 
-**Also load-bearing for later milestones:** `placeinator/matching/vectors.py`
-is the *only* place that encodes or decodes an embedding (float32 little-endian,
-C-contiguous, L2-normalized), and every stored vector carries its
-`embedding_model`/`embedding_dim` alongside the bytes — so a future model change
-leaves stale rows detectable and re-embeddable rather than silently
-deserializing into meaningless numbers. This provenance discipline is what let
-M2 and M3 later reuse the same stored vectors as a cache instead of re-embedding
-on every request (see below).
+**Also worth knowing:** every embedding the app stores is tagged with exactly
+which model produced it. That sounds minor, but it's what let later milestones
+safely *reuse* stored embeddings instead of recomputing them every time —
+without that tag, there'd be no safe way to tell a fresh embedding from a
+stale one.
 
-**Done when:** add 3 resumes → paste a JD → get a ranked recommendation with a
-readable explanation, in under 2 seconds — verified live through the actual UI.
+**Done when:** add 3 resumes, paste a job description, get a ranked match with
+a readable explanation — in under 2 seconds, tested against the real app.
 
-## Step 3 — M2: Job intelligence
+## M2 — Job Intelligence
 
-**Built:** four job-source adapters (`ats_feed`, `indeed`, `linkedin`,
-`naukri`), hard-constraint filtering and soft-preference ranking, personalized
-notifications, and the Jobs UI.
+**Built:** four job-board integrations (Greenhouse/Lever/Ashby, Indeed,
+LinkedIn, Naukri), filtering, ranking, and notifications.
 
-**The adapters were verified live against the real sites before any parsing code
-was written**, which changed the plan mid-flight in a couple of places: an
-earlier assumption that `indeed` would need real browser automation (Playwright)
-turned out wrong once the actual search-results page was inspected — it's
-server-rendered HTML with job data embedded as JSON in a `<script>` tag, so a
-plain HTTP client suffices. `linkedin` and `naukri` were confirmed, live, to
-block essentially everything (a blanket `robots.txt` disallow for `linkedin`;
-active Akamai bot detection for `naukri`) — and per ADR 0003, blocked means
-blocked. The app never disguises its user agent or otherwise evades a real
-access-control boundary; a blocked source returns a `SourceBlocked` value the UI
-offers manual paste against, never an error.
+**Every integration was checked against the real site first**, and that
+changed the plan more than once. Indeed, for example, was expected to need a
+real browser to scrape — turned out its search page already includes the job
+data as plain JSON, so a simple HTTP request is enough. LinkedIn and Naukri, on
+the other hand, really do block almost everything (LinkedIn via its own
+published rules, Naukri via active bot detection) — and per this project's own
+rule, "blocked" is respected, not worked around. The app never fakes being a
+browser to sneak past that.
 
-**A genuinely serious bug was found and fixed *twice*** while verifying `indeed`
-— worth walking through in full because the second bug was introduced by fixing
-the first one, and the failure mode was specifically the kind of thing "verify,
-don't assume" is meant to catch:
+**A real bug was found and fixed — twice.** First: Python's built-in
+robots.txt reader has a known flaw — it applies the *first* matching rule in a
+file rather than the *most specific* one, which is backwards from how the
+standard actually works. Indeed's robots.txt happens to be shaped exactly the
+way that exposes this. The first fix patched around Python's own reader rather
+than replacing it — and that patch relied on internal details of that reader
+that turned out to behave differently between two Python versions, so the fix
+silently failed in one environment while appearing to work in another. The
+real fix replaced the whole approach: read the rules directly, with no
+dependency on Python's flawed reader at all.
 
-1. Python's `urllib.robotparser.RobotFileParser.can_fetch` resolves rules by
-   first-match-in-file-order, not RFC 9309's longest-match-wins. Indeed's own
-   `robots.txt` opens its `User-agent: *` block with a blanket `Allow: /` before
-   later, more specific `Disallow:` lines — exactly the shape that exposes this
-   bug, reading the file as more permissive than its own author intended.
-2. The first fix kept `RobotFileParser` for parsing and only replaced its
-   decision logic, reading the result off `entries`/`default_entry`/
-   `RuleLine.path`/`.allowance` — undocumented private attributes with no
-   stability guarantee. They behaved differently between Python 3.13.7 (the dev
-   machine) and 3.13.15 (CI's runner), so every disallow rule silently evaluated
-   to "allowed" on CI while the exact same code passed locally.
+**A cleanup pass later closed a gap between "built" and "usable."** The
+Greenhouse/Lever/Ashby integration — the most reliable one, since it uses
+official APIs rather than scraping — had been fully working for a while but
+had no button in the UI to actually use it. Fixed, along with a few related
+gaps (a broken link that discovered jobs couldn't be opened from, network
+failures showing as raw errors instead of a clean message). This pass also
+promoted a previously-optional test suite to a required one — and that
+promotion immediately caught a real bug: a matching score could, in rare
+cases, land very slightly above its supposed maximum, due to how floating-point
+math behaves differently on different processors. Fixed with a proper bound.
 
-The shipped fix parses `robots.txt` from raw text directly
-(`placeinator/jobs/sources/base.py`), with zero dependency on
-`urllib.robotparser`, regression-tested against a real captured Indeed
-`robots.txt`. CI now also pins an exact Python patch version rather than a
-floating minor version, specifically so this class of environment-dependent
-skew can't hide again.
+**Also added:** a cache for match scores, since re-scoring every job against
+every resume on every screen refresh was wasteful. A stored score is now
+reused as-is if nothing relevant has changed since it was computed.
 
-**A consolidation pass** later closed a gap between "the backend works" and "a
-user can actually reach it": the ATS-feed sync (Greenhouse/Lever/Ashby — the
-only adapter that reliably returns full job descriptions, since the other three
-are scraped rather than official APIs) had been complete and tested since M2's
-first slice but had no frontend at all. Fixed alongside a handful of other
-reachability and robustness gaps — transport failures degrading to
-`SourceBlocked` instead of a raw exception, `JobOut` gaining the `url` field it
-had been missing (every discovered job was previously a dead end in the UI) —
-and the `model`-marked test suite (which needs the real embedding model) was
-promoted from a deselected-by-default, `continue-on-error` CI step to a required
-one. That promotion immediately caught a real, previously-invisible bug: two
-component scores could exceed their documented `[0, 1]` bound, because float32
-cosine similarity of two near-identical vectors can land a few ULPs above 1.0 —
-CPU-dependent, so it passed locally and failed on CI. Fixed with one shared
-clamping helper instead of the ad hoc `max(0.0, ...)` two of the three scorers
-had been doing.
+## M3 — LaTeX Resume Tailoring
 
-**Also built in this milestone's tail:** the ranking cache. `rank_jobs` runs
-over the whole job corpus on every Dashboard mount; before this, that meant
-re-embedding every resume chunk and job requirement on every mount. The fix
-reuses the exact provenance mechanism M1 built for a different reason (the
-`embedding_model`/`embedding_dim` stamp on every stored vector) to make
-`MatchResult` double as a cache: a row is reused untouched when it's still
-fresh (same scoring version, and neither side has been written since the score
-was taken), and even a genuine rescore reuses the persisted vectors rather than
-re-embedding from text.
+**Built:** a tool that takes an existing LaTeX resume and a job description,
+and reorders (never rewrites) the resume's content to better match the job.
 
-## Step 4 — M3: LaTeX resume tailoring
+The hard rule here, inherited from the no-LLM constraint: the tool must never
+invent a skill, project, or line of experience the user didn't already write.
+Rather than just instructing a model to behave, the design makes this
+*physically impossible* — the tool only ever cuts and pastes exact chunks of
+the user's original text. It has no way to write anything new.
 
-**Built:** a LaTeX structure parser with byte-exact source spans, a relevance
-scorer and reordering policy, a splice-based emitter, and a three-pane Tailor
-workspace.
+**Building this required understanding a LaTeX-parsing library's real
+behavior**, which turned out to differ from what its documentation implied in
+two important ways — checked directly, not assumed:
 
-The spec's hardest constraint here is ADR 0002's inheritance into this specific
-feature: the system must never invent a qualification, experience, project, or
-skill that isn't already in the user's resume. Rather than instructing a model
-not to hallucinate, the design makes invention **structurally impossible**: the
-emitter only ever splices byte ranges out of the user's own original source. It
-never regenerates text.
+- A resume "section" doesn't come back as one clean block containing its
+  content. The heading and the content after it are separate, unconnected
+  pieces.
+- Custom formatting commands — which is how most real resume templates
+  actually write their bullet points — aren't understood by the library at
+  all; it just sees them as plain, disconnected text.
 
-**The design was shaped by two things confirmed against the real
-`pylatexenc` library, not assumed from its docs**, documented in
-`placeinator/latex/parsing.py`'s module docstring:
+Both findings ruled out the "obvious" design (walk a tree of the document's
+structure). Instead, the tool treats the whole file as a flat sequence of
+labeled chunks and only ever reorders *whole chunks*. This makes one important
+guarantee easy to test and trust: reordering nothing at all must reproduce the
+original file byte-for-byte — and it does, provably, because of how the chunks
+are built, not because of a rule someone has to remember to follow.
 
-- `pylatexenc`'s node tree doesn't nest a section's body under its heading —
-  `\section{Skills}` is one flat macro node, and everything that follows it is
-  a *sibling* in the parent's node list, not a child.
-- A `\newcommand`-defined macro — the shape most real-world resume templates
-  actually use (e.g. `\resumeItem{...}`) — doesn't get its argument captured as
-  a child node at all, since `pylatexenc` only associates arguments for macros
-  it has a signature for.
+**Scoring reuses the same infrastructure M1 and M2 already built** — the same
+stored embeddings, the same scoring math — rather than building a second,
+separate scoring system from scratch.
 
-Both findings ruled out a tree-walking design. Instead, `parse_latex`
-partitions the source into a flat, ordered, contiguous list of spans (Fixed /
-Section / Bullet); identity-order emission reproducing the input byte-for-byte
-is therefore true *by construction*, not something separately proven correct —
-this is the round-trip acceptance gate
-(`tests/unit/test_latex_parsing.py`), run against real captured `.tex` files,
-including one using only custom bullet macros specifically to prove the honest
-whole-section fallback when no `\item` is recognized.
+**Nothing is ever deleted automatically.** A low-scoring bullet point is
+flagged as a *suggestion* to remove, but stays in the resume unless the user
+explicitly says to drop it.
 
-**The relevance scoring reuses M1/M2 infrastructure end to end rather than
-building a parallel pipeline** — this is the same design principle the M2
-ranking cache established, applied again: each movable unit (a section or
-bullet) is scored by pooling the *same* persisted `ResumeChunk` embedding
-vectors M1 already computed and M2's cache already trusts, via the same
-`mean_pool`/`clamp_unit` primitives the M1 matching engine uses for its
-`overall` score. No new embedding calls anywhere in the tailoring path.
+**One more real bug, found late:** the code editor used to display the LaTeX
+output (Monaco) defaults to loading itself from the internet at runtime,
+rather than using the copy already bundled with the app — which would have
+silently broken this whole feature the moment someone used it offline. Fixed
+by pointing it at the bundled copy instead, and confirmed against a real
+production build, not just a passing type-check.
 
-**Removal is never automatic**, mirroring the spec's own requirement that
-removals need explicit confirmation: a low-scoring bullet is flagged as a
-*suggestion* only, and the emitted `.tex` still contains it unless the caller
-explicitly excludes it by id.
+**Left out on purpose:** actually compiling the LaTeX into a PDF. That's a
+separate, genuinely independent piece of work (checking for a LaTeX
+installation, running it as a subprocess, handling failure gracefully), and
+bundling it into the riskiest new feature in the app wasn't worth it.
 
-**One more real bug, found integrating Monaco into the Tailor page**:
-`@monaco-editor/react`'s loader defaults to fetching the editor itself from
-`cdn.jsdelivr.net` at runtime, rather than using the copy already bundled with
-the app — confirmed by reading the loader's own config, not assumed. For an app
-whose core commitment is fully offline operation (ADR 0002/ADR 0005), this would
-have silently broken the Tailor page the moment there was no network. Fixed by
-pointing the loader at the bundled package explicitly and verified against the
-actual production build output, not just a passing type-check.
-
-**PDF compile is explicitly out of scope for this milestone** — a genuinely
-independent concern (TeX-distribution detection, subprocess execution,
-graceful degradation when no TeX distribution exists), deliberately deferred
-rather than bolted onto the same pass as the highest-risk new subsystem in the
-app, for the same reasoning as M0's PyInstaller deferral above.
-
-## Current status
+## Where things stand
 
 | Milestone | Status |
 |---|---|
-| M0 — Foundation | Sidecar + frontend shell complete; Tauri desktop shell verified in dev mode; PyInstaller bundling not yet wired |
-| M1 — Profile, Resume, Matching | Complete |
-| M2 — Job intelligence | Complete |
-| M3 — LaTeX resume tailoring | Complete, except PDF compile |
-| M4 — Placement automation | Not started |
-| M5 — Career intelligence and outreach | Not started |
-| M6 — Hardening and release | Not started |
+| M0 — Foundation | Sidecar + web app done; desktop shell working in development mode; packaging not done yet |
+| M1 — Profile, Resume, Matching | Done |
+| M2 — Job Intelligence | Done |
+| M3 — LaTeX Tailoring | Done, except PDF export |
+| M4 — Placement Automation | Not started |
+| M5 — Career Intelligence & Outreach | Not started |
+| M6 — Hardening & Release | Not started |
 
-For exact numbers: 50 Python modules under `placeinator/`, 30 TypeScript/TSX
-files under `src/`, 175 tests (139 run by default; 36 require either the real
-embedding model or live network access, both opt-in). See
-[roadmap.md](./roadmap.md) for the authoritative, continuously-updated status
-and [CHANGELOG.md](./CHANGELOG.md) for the chronological record of every change.
+Rough numbers: 50 Python files, 30 TypeScript files, 175 tests (139 run
+automatically; 36 more need either the real ML model or a live internet
+connection, so they're opt-in). For the always-current status, see
+[roadmap.md](./roadmap.md); for the full history, see
+[CHANGELOG.md](./CHANGELOG.md).
