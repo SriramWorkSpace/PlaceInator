@@ -308,6 +308,43 @@ class MatchResult(Base, TimestampMixin):
 
 
 # --------------------------------------------------------------------------- #
+# LaTeX resume tailoring (spec section 5)
+# --------------------------------------------------------------------------- #
+
+
+class TailoredResume(Base, TimestampMixin):
+    """One (resume, job) tailoring result -- the reordered .tex plus the
+    change log that explains it, so revisiting the Tailor page doesn't need
+    to recompute. Recomputed and overwritten on every tailor request; unlike
+    MatchResult there is no freshness gate, since tailoring is user-triggered
+    rather than polled on every mount."""
+
+    __tablename__ = "tailored_resume"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    resume_id: Mapped[int] = mapped_column(ForeignKey("resume.id", ondelete="CASCADE"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id", ondelete="CASCADE"))
+
+    tex: Mapped[str] = mapped_column(Text)
+
+    # {"sections": [...], "requirements_matched": [...], "requirements_missing": [...]}
+    # -- see placeinator.latex.tailoring.TailoringResult.to_dict.
+    change_log: Mapped[dict] = mapped_column(JSON, default=dict)
+
+    # Bullet ids (Bullet.span.start -- see placeinator.latex.parsing) the
+    # user explicitly excluded. Persisted so re-opening a saved tailoring
+    # shows the same choice rather than silently reverting it.
+    excluded_bullet_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+
+    resume: Mapped[Resume] = relationship()
+    job: Mapped[Job] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("resume_id", "job_id", name="uq_tailored_resume_resume_job"),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Placement automation (spec section 7)
 # --------------------------------------------------------------------------- #
 

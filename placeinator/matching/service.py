@@ -31,9 +31,10 @@ def _as_naive_utc(value: datetime) -> datetime:
     return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
 
 
-def _stored_vectors(rows: list[ResumeChunk] | list[JobRequirement]) -> np.ndarray | None:
+def stored_vectors(rows: list[ResumeChunk] | list[JobRequirement]) -> np.ndarray | None:
     """The persisted embeddings for these rows, or ``None`` if any of them
-    can't be trusted.
+    can't be trusted. Public: placeinator.latex.tailoring scores its movable
+    units from the same persisted vectors rather than re-embedding.
 
     Every row stamps ``embedding_model``/``embedding_dim`` alongside the bytes
     precisely so a model change leaves them detectable rather than silently
@@ -124,8 +125,8 @@ def match_resume_to_job(
         requirements=[_requirement_to_domain(r) for r in requirement_rows],
         resume_target_role=resume.target_role,
         jd_title=job.designation,
-        resume_vectors=_stored_vectors(chunk_rows),
-        requirement_vectors=_stored_vectors(requirement_rows),
+        resume_vectors=stored_vectors(chunk_rows),
+        requirement_vectors=stored_vectors(requirement_rows),
     )
 
     if result is None:

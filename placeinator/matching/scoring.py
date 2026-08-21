@@ -31,9 +31,10 @@ COMPONENT_WEIGHTS: dict[str, float] = {
 SCORING_VERSION = "1"
 
 
-def _clamp_unit(value: float) -> float:
+def clamp_unit(value: float) -> float:
     """Every component value is contractually in [0, 1] -- MatchResult.explanation
-    is user-facing and the weighted sum assumes it.
+    is user-facing and the weighted sum assumes it. Public: placeinator.latex
+    scores its own movable units with the same primitive.
 
     Cosine similarity of two *near-identical* float32 vectors can land a few
     ULPs above 1.0 (e.g. 1.0000001192092896 for an exact role-title match),
@@ -91,7 +92,9 @@ class MatchExplanation:
         return sum(c.value * c.weight for c in self.components.values())
 
 
-def _mean_pool(vectors: np.ndarray) -> np.ndarray:
+def mean_pool(vectors: np.ndarray) -> np.ndarray:
+    """Public: placeinator.latex pools a movable unit's chunk vectors the
+    same way this module pools resume/JD vectors for the ``overall`` score."""
     if len(vectors) == 0:
         return np.zeros(vectors.shape[-1] if vectors.ndim > 1 else 384, dtype=np.float32)
     pooled = vectors.mean(axis=0)
@@ -100,11 +103,11 @@ def _mean_pool(vectors: np.ndarray) -> np.ndarray:
 
 
 def _score_overall(resume_vectors: np.ndarray, jd_vectors: np.ndarray) -> ComponentScore:
-    resume_mean = _mean_pool(resume_vectors)
-    jd_mean = _mean_pool(jd_vectors)
+    resume_mean = mean_pool(resume_vectors)
+    jd_mean = mean_pool(jd_vectors)
     has_content = resume_vectors.size and jd_vectors.size
     similarity = float(np.dot(resume_mean, jd_mean)) if has_content else 0.0
-    return ComponentScore(value=_clamp_unit(similarity), weight=COMPONENT_WEIGHTS["overall"])
+    return ComponentScore(value=clamp_unit(similarity), weight=COMPONENT_WEIGHTS["overall"])
 
 
 def _score_skills(chunks: list[TextChunk], requirements: list[RequirementLine]) -> ComponentScore:
@@ -150,7 +153,7 @@ def _score_bullets_against_requirements(
     best_bullet_idx = sims.argmax(axis=1)
     best_scores = sims[np.arange(len(requirements)), best_bullet_idx]
 
-    value = _clamp_unit(float(best_scores.mean()))
+    value = clamp_unit(float(best_scores.mean()))
 
     ranked = sorted(
         zip(requirements, best_bullet_idx, best_scores, strict=True),
@@ -161,7 +164,7 @@ def _score_bullets_against_requirements(
         Evidence(
             resume_text=bullets[int(bullet_idx)].text,
             requirement_text=req.text,
-            similarity=_clamp_unit(float(sim)),
+            similarity=clamp_unit(float(sim)),
         )
         for req, bullet_idx, sim in ranked[:_TOP_K_EVIDENCE]
     ]
@@ -173,7 +176,7 @@ def _score_role(resume_target_role: str | None, jd_title: str) -> ComponentScore
         return ComponentScore(value=0.5, weight=COMPONENT_WEIGHTS["role"])
     vectors = embed_texts([resume_target_role, jd_title])
     similarity = float(np.dot(vectors[0], vectors[1]))
-    return ComponentScore(value=_clamp_unit(similarity), weight=COMPONENT_WEIGHTS["role"])
+    return ComponentScore(value=clamp_unit(similarity), weight=COMPONENT_WEIGHTS["role"])
 
 
 def _rows_at(vectors: np.ndarray, indices: list[int]) -> np.ndarray:

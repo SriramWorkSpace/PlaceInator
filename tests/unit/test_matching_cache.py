@@ -20,8 +20,8 @@ from placeinator.matching.scoring import ComponentScore, MatchExplanation
 from placeinator.matching.service import (
     _as_naive_utc,
     _is_fresh,
-    _stored_vectors,
     match_resume_to_job,
+    stored_vectors,
 )
 from placeinator.matching.vectors import EMBEDDING_DIM, EMBEDDING_MODEL_NAME, encode_vector
 
@@ -192,7 +192,7 @@ def test_a_result_taken_before_the_job_changed_is_stale(session, fixtures):
 
 def test_stored_vectors_are_reused_when_the_model_stamp_matches(session, fixtures):
     resume, _ = fixtures
-    vectors = _stored_vectors(list(resume.chunks))
+    vectors = stored_vectors(list(resume.chunks))
 
     assert vectors is not None
     assert vectors.shape == (1, EMBEDDING_DIM)
@@ -207,7 +207,7 @@ def test_a_model_change_falls_back_to_re_embedding(session, fixtures):
     chunk = list(resume.chunks)[0]
     chunk.embedding_model = "some-other-model"
 
-    assert _stored_vectors([chunk]) is None
+    assert stored_vectors([chunk]) is None
 
 
 def test_a_missing_embedding_falls_back_to_re_embedding(session, fixtures):
@@ -215,13 +215,13 @@ def test_a_missing_embedding_falls_back_to_re_embedding(session, fixtures):
     chunk = list(resume.chunks)[0]
     chunk.embedding = None
 
-    assert _stored_vectors([chunk]) is None
+    assert stored_vectors([chunk]) is None
 
 
 def test_no_rows_is_an_empty_matrix_not_a_fallback():
     """A resume with no chunks is legitimately empty -- that must not be
     confused with "these embeddings can't be trusted"."""
-    vectors = _stored_vectors([])
+    vectors = stored_vectors([])
 
     assert vectors is not None
     assert vectors.shape == (0, EMBEDDING_DIM)

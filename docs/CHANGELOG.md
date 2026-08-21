@@ -7,6 +7,54 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **M3: JD-based LaTeX resume tailoring** (spec §5), reordering an existing
+  resume for a specific job without ever rewriting or inventing content
+  (ADR 0002). New `placeinator/latex/` package:
+  - `parsing.py` partitions a resume's LaTeX source into a flat, contiguous
+    span list rather than walking pylatexenc's node tree — verified first
+    that pylatexenc doesn't nest a section's body under its heading, and
+    that a `\newcommand`-defined macro (the shape most real templates use,
+    e.g. `\resumeItem{...}`) never gets its argument captured as a child
+    node. Emitting all spans in original order reproduces the source
+    byte-for-byte *by construction*, which is what the round-trip acceptance
+    gate checks.
+  - `tailoring.py` scores each movable section/bullet by pooling the
+    *already-persisted* `ResumeChunk`/`JobRequirement` embedding vectors
+    (reusing the same primitives the ranking cache uses), reorders sections
+    into a fixed canonical whitelist and bullets by relevance, and never
+    removes anything automatically — a low-scoring bullet is a suggestion,
+    dropped from the output only when the caller explicitly excludes it.
+  - `POST /api/latex/tailor` and a rebuilt `src/routes/Tailor.tsx`
+    (resume/job pickers, a Monaco-rendered `.tex` pane, a change-log pane
+    with per-bullet exclusion checkboxes).
+  - New `tailored_resume` table, upserting on `(resume_id, job_id)` like
+    `MatchResult` does.
+  - PDF compile is explicitly out of scope for this slice (independent
+    concern: TeX-distribution detection, subprocess).
+- Two small, reusable helpers promoted from private to public so
+  `placeinator.latex` could reuse them instead of duplicating: `mean_pool`/
+  `clamp_unit` (`placeinator/matching/scoring.py`) and `stored_vectors`
+  (`placeinator/matching/service.py`). Also: `LATEX_HEADING_RE` and a new
+  `classify_heading` helper in `placeinator/matching/chunking.py`, so
+  section-heading recognition has one source of truth instead of two.
+
+### Fixed
+
+- **`@monaco-editor/react` was silently CDN-dependent.** Its loader defaults
+  to fetching the real editor from `cdn.jsdelivr.net` at runtime instead of
+  using the `monaco-editor` package already bundled locally — confirmed by
+  reading `@monaco-editor/loader`'s own default config, not assumed. For an
+  app whose core commitment is "fully offline, zero API cost, no user data
+  leaves the machine" (ADR 0002/ADR 0005), this would have left the Tailor
+  page silently broken with no network. Fixed via `loader.config({ monaco })`
+  in `src/lib/monaco-editor.ts`, with the editor's worker imported through
+  Vite's native `?worker` suffix rather than an extra bundler plugin.
+  Verified against the real production build — Monaco now appears as its own
+  isolated chunk built from the local package — not just a passing
+  typecheck.
+
 ### Changed
 
 - **Ranking now reuses `MatchResult` rows instead of rescoring the corpus.**

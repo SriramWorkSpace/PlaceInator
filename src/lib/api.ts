@@ -22,6 +22,8 @@ import type {
   ProfileOut,
   ResumeOut,
   SourceFormat,
+  TailorIn,
+  TailorOut,
 } from "@/lib/types";
 
 declare global {
@@ -221,3 +223,11 @@ export function extractJobFromFile(params: {
 
 export const rankResumesForJob = (jobId: number) =>
   apiFetch<MatchOut[]>(`/api/matching/jobs/${jobId}/rank-resumes`, { method: "POST" });
+
+// -- Latex -------------------------------------------------------------------
+
+/** Reorders/selects/emphasizes an existing library resume for a job -- never
+ * rewrites prose (ADR 0002). Recomputes and overwrites on every call, so
+ * toggling `excluded_bullet_ids` and calling again is the normal flow. */
+export const tailorResume = (data: TailorIn) =>
+  apiFetch<TailorOut>("/api/latex/tailor", { method: "POST", body: JSON.stringify(data) });

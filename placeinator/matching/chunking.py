@@ -43,10 +43,13 @@ _HEADING_RE = re.compile(
 )
 
 # A minimal LaTeX section-heading match: \section{Skills}, \section*{Skills},
-# \subsection{...}. This is a heuristic for the matching engine's plain-text
-# chunker only -- real LaTeX-structure-aware parsing (with byte-exact node
-# spans for splicing) is placeinator.latex's job in M3, not this module.
-_LATEX_HEADING_RE = re.compile(r"^\s*\\(?:sub)*section\*?\{([^}]{2,60})\}")
+# \subsection{...}. Public because placeinator.latex.parsing reuses it to pull
+# a heading's display text out of a pylatexenc macro node's raw span, rather
+# than depending on how pylatexenc structures that macro's parsed arguments.
+# Here, it's a heuristic for the matching engine's plain-text chunker only --
+# real LaTeX-structure-aware parsing (byte-exact node spans for splicing) is
+# placeinator.latex's job.
+LATEX_HEADING_RE = re.compile(r"^\s*\\(?:sub)*section\*?\{([^}]{2,60})\}")
 
 _BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*•▪◦]|\\item\b)\s*")
 
@@ -76,10 +79,18 @@ class RequirementLine:
 
 
 def _match_heading(line: str) -> ChunkKind | None:
-    m = _LATEX_HEADING_RE.match(line) or _HEADING_RE.match(line)
+    m = LATEX_HEADING_RE.match(line) or _HEADING_RE.match(line)
     if not m:
         return None
-    return _SECTION_HEADINGS.get(m.group(1).strip().lower())
+    return classify_heading(m.group(1))
+
+
+def classify_heading(heading_text: str) -> ChunkKind | None:
+    """Maps an already-extracted heading's display text (not a raw line) to
+    its canonical kind. Public: placeinator.latex uses this same category
+    map to order sections into the spec's canonical whitelist, rather than
+    keeping a second, potentially-drifting copy of section-name synonyms."""
+    return _SECTION_HEADINGS.get(heading_text.strip().lower())
 
 
 def chunk_resume_text(source_text: str) -> list[TextChunk]:

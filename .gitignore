@@ -53,3 +53,7 @@ Thumbs.db
 
 # graphify knowledge-graph output (regenerated locally, not part of the source tree)
 graphify-out/
+
+# Claude Code's local session state (permission allowlist, scheduler lock) --
+# machine/session-specific, not project config.
+.claude/

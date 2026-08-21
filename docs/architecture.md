@@ -145,18 +145,48 @@ promise:
 
 1. `pylatexenc.latexwalker` produces a node tree; each node retains its `(start, end)`
    offsets into the original source.
-2. **Movable units** are identified: `\section` blocks, `itemize` items, project
-   environments, skill entries. Preamble, macros, and anything unrecognized are
-   **immutable**.
+2. **Movable units** are identified: `\section` blocks and, within a section, `\item`
+   entries in a directly-nested `itemize`/`enumerate`. Preamble, connective text, and
+   anything unrecognized are **immutable**.
 3. Each unit is scored against the JD by the matching engine.
-4. Sections reorder by a permitted whitelist order, projects and bullets by score,
-   skills by JD coverage. Units below `drop_threshold` become removal *candidates*.
+4. Sections reorder by a permitted whitelist order (the spec's own section tree);
+   bullets within a section reorder by score. A low-scoring bullet becomes a removal
+   *suggestion*, never an automatic drop.
 5. **Output is produced by splicing the original source spans in the new order.**
    Nothing is regenerated, so invention is impossible and custom macros survive intact.
-6. Removals require explicit confirmation in the UI diff. Never silent.
+6. Removals require explicit confirmation from the caller. Never silent.
 
 **Acceptance gate:** parse → emit with no reordering must reproduce the input
 byte-for-byte across a corpus of real `.tex` files.
+
+**Verified in practice (2026-08-21).** Two things ruled out implementing step 1 as an
+actual tree walk, both confirmed against real `pylatexenc==2.11` before any code was
+written, not assumed from its docs:
+
+- pylatexenc's node tree does **not** nest a section's body under its heading —
+  `\section{Skills}` is one flat macro node, and everything that follows it is a
+  *sibling* in the parent's node list, not a child. Same for `\item`: the marker and
+  its body text are separate siblings.
+- A `\newcommand`-defined macro — the shape most real resume templates actually use,
+  e.g. `\resumeItem{...}` — doesn't get its argument captured as a child node at all.
+  pylatexenc only associates arguments for macros it has a signature for, so an
+  unrecognized macro parses as zero-arg and its following `{...}` group is an
+  unrelated sibling.
+
+So `placeinator/latex/parsing.py::parse_latex` computes unit boundaries directly from
+cut points (section- and item-macro *positions*) and partitions the source into a flat,
+contiguous span list, rather than walking the tree. Emitting all spans in original order
+is therefore the identity by construction — the round-trip gate is provably true rather
+than something to separately get right. A section using only custom bullet macros still
+round-trips correctly; it just isn't split any finer than "one movable block", an
+honest scope limit stated in the package's `__init__.py`, not a silent gap.
+
+Scoring reuses M1/M2 infrastructure rather than a parallel pipeline: a unit's relevance
+is the cosine of its overlapping `ResumeChunk` rows' mean-pooled, **already-persisted**
+embedding vectors against the JD's, via the same `mean_pool`/`clamp_unit` primitives
+`placeinator.matching.scoring` uses for its `overall` component. Requirement coverage is
+a set difference over `Job.required_skill_ids` and the resume's own
+`ResumeChunk.skill_ids` — both already computed and stored, not re-extracted.
 
 ## Data layer
 

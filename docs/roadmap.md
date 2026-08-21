@@ -127,14 +127,58 @@ afterthought.
 
 ## M3 — LaTeX resume tailoring
 
-- `pylatexenc` parser retaining source spans
-- **Round-trip gate:** identity reorder reproduces input byte-for-byte. This blocks the
-  milestone.
-- Unit scoring, reordering policy, splice emitter
-- Change log: moved, de-emphasized, requirements matched, requirements missing, and
-  what was deliberately not added
-- Three-pane Tailor workspace (JD │ LaTeX diff │ changes), Monaco lazy-loaded
-- Optional PDF compile, degrading gracefully when no TeX distribution is installed
+*Complete, except PDF compile (see below).* Verified against real `pylatexenc`
+behavior before any code was written, not assumed from its docs — see
+`placeinator/latex/parsing.py`'s module docstring for the two findings that
+shaped the design: pylatexenc's node tree doesn't nest a section's body under
+its heading (siblings, not children), and a `\newcommand`-defined macro like
+`\resumeItem{...}` — the shape most real resume templates actually use —
+doesn't get its argument captured as a child node at all.
+
+- **`pylatexenc` parser retaining source spans**, but not as a tree walk:
+  `parse_latex` partitions the source into a flat, ordered, contiguous span
+  list (Fixed / Section / Bullet), so identity-order emission reproducing the
+  input byte-for-byte is true *by construction*, not something separately
+  proven correct.
+- **Round-trip gate**: `tests/unit/test_latex_parsing.py`, against real
+  captured resume `.tex` files in `tests/fixtures/resumes/`, including one
+  using only custom bullet macros (proving the honest whole-section fallback
+  when no `\item` is recognized) and one with multiple independent bullet
+  groups under one section heading.
+- **Unit scoring, reordering policy, splice emitter**
+  (`placeinator/latex/tailoring.py`): reuses M1/M2 infrastructure end to
+  end rather than a parallel pipeline — pools the *same* persisted
+  `ResumeChunk`/`JobRequirement` embedding vectors
+  `placeinator.matching.service` already caches, via the same
+  `mean_pool`/`clamp_unit` primitives `placeinator.matching.scoring` uses for
+  its `overall` component. Sections reorder into a fixed canonical whitelist
+  (the spec's own section tree); bullets *within* a section reorder by
+  relevance score. Removal is never automatic — a low-scoring bullet is
+  flagged as a suggestion only, and the emitted `.tex` still contains it
+  unless the caller explicitly excludes it.
+- **Change log**: `TailoredResume.change_log` records each section's/bullet's
+  original vs. new position and score, plus requirements matched/missing —
+  the latter a set difference over `Job.required_skill_ids` and the resume's
+  own `ResumeChunk.skill_ids`, both already computed and stored, not
+  re-extracted.
+- **Three-pane-equivalent Tailor workspace** (`src/routes/Tailor.tsx`):
+  resume/job pickers, a Monaco-rendered `.tex` output pane, and a change-log
+  pane with per-bullet exclusion checkboxes. Monaco is lazy-loaded on this
+  route only, exactly like `Jobs.tsx`'s DatePicker.
+- **Found and fixed a real offline-correctness bug while wiring Monaco up**:
+  `@monaco-editor/react`'s loader defaults to fetching the actual editor from
+  `cdn.jsdelivr.net` at runtime rather than using the locally bundled
+  `monaco-editor` package — confirmed by reading `@monaco-editor/loader`'s
+  own config, not assumed. Unacceptable for an app whose core commitment is
+  "fully offline, zero API cost" (ADR 0002/ADR 0005): the Tailor page would
+  have silently broken with no network. Fixed in
+  `src/lib/monaco-editor.ts` via `loader.config({ monaco })` pointed at the
+  bundled package, plus a Vite `?worker` import for the editor's worker.
+  Verified against the actual production build (Monaco appears as its own
+  ~4 MB chunk, isolated to the Tailor route) and Vite's dev-server resolution
+  path, not just a passing `tsc`.
+- **PDF compile is out of scope for this slice.** Independent concern
+  (TeX-distribution detection, subprocess), not a gap in what shipped.
 
 ## M4 — Placement automation
 

@@ -186,3 +186,44 @@ export interface MatchOut {
   personalized_score: number;
   explanation: MatchExplanation;
 }
+
+// -- LaTeX tailoring (spec §5) -----------------------------------------------
+
+export interface TailorIn {
+  resume_id: number;
+  job_id: number;
+  /** Bullet ids (see BulletOut.bullet_id) the user has chosen to drop -- the
+   * only way content is ever omitted. Never inferred from scores. */
+  excluded_bullet_ids: number[];
+}
+
+export interface BulletOut {
+  /** Stable identity for one \item, reused across repeated tailor calls to
+   * toggle exclusion -- not a database row id. */
+  bullet_id: number;
+  text: string;
+  original_index: number;
+  new_index: number;
+  /** Relevance against the job, 0..1. */
+  score: number;
+  /** Below-threshold flag only -- never auto-removed. */
+  suggested_removal: boolean;
+  excluded: boolean;
+}
+
+export interface SectionOut {
+  heading: string;
+  original_index: number;
+  new_index: number;
+  /** Empty when the section has no recognized itemize/\item structure --
+   * the section still reorders as a whole, just not bullet-by-bullet. */
+  bullets: BulletOut[];
+}
+
+export interface TailorOut {
+  tex: string;
+  sections: SectionOut[];
+  /** Taxonomy skill ids -- see placeinator/skills/taxonomy.json. */
+  requirements_matched: string[];
+  requirements_missing: string[];
+}
