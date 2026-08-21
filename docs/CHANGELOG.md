@@ -9,6 +9,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **M0: `src-tauri/` scaffolded, dev-mode sidecar supervision working end to end.**
+  `npm run tauri dev` now builds the Rust shell, spawns
+  `.venv/Scripts/python.exe -m placeinator.main`, reads its `PLACEINATOR_READY`
+  handshake line on a background thread with a bounded 30s timeout (so a sidecar
+  that never starts fails loudly rather than hanging the window forever), injects
+  `window.__PLACEINATOR__` via an `initialization_script` before the frontend's
+  first API call, and shows the real authenticated UI -- verified against a real
+  running window, not just a compile. Closing the window kills the sidecar
+  (`RunEvent::ExitRequested`); verified with a real window close, zero orphaned
+  `python.exe`/`node.exe` processes. PyInstaller bundling (`bundle.externalBin`)
+  is deliberately deferred to its own pass -- see the ADR 0001 addendum in
+  `docs/decisions.md` for why, and for two real Rust/MSVC toolchain issues found
+  and fixed along the way (Git's `link.exe` shadowing MSVC's; this VS release
+  being new enough that neither `rustup` nor `rustc`'s bundled detection
+  recognizes it yet).
 - **M3: JD-based LaTeX resume tailoring** (spec §5), reordering an existing
   resume for a specific job without ever rewriting or inventing content
   (ADR 0002). New `placeinator/latex/` package:

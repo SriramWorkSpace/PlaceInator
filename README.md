@@ -86,7 +86,7 @@ logs everything else to stderr, so that channel never carries anything but the h
 |---|---|---|
 | Python | 3.12+ (developed on 3.13) | sidecar |
 | Node.js | 22+ (`.nvmrc` pins 22; Node 20 is end-of-life) | frontend |
-| Rust + MSVC build tools | stable | Tauri shell — **not yet installed** |
+| Rust + MSVC build tools | stable | Tauri shell |
 | MiKTeX or TeX Live | any | optional PDF compile only |
 | Tesseract OCR | any | optional scanned-document support only |
 
@@ -139,7 +139,7 @@ placeinator/      Python sidecar — flat feature packages, one per spec section
   skills/         taxonomy — the semantic backbone, since there is no LLM
 migrations/       Alembic; the only thing that creates or alters schema
 src/              React frontend (routes/, components/, lib/, styles/)
-src-tauri/        Rust shell — blocked on the Rust toolchain
+src-tauri/        Rust shell — dev-mode sidecar supervision working; PyInstaller bundling not yet wired
 tests/            unit/ (in-process) · integration/ (real I/O) · fixtures/ (golden files)
 docs/             specification, architecture, roadmap, changelog, decisions
 ```

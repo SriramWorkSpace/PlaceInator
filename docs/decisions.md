@@ -82,6 +82,43 @@ one schema, one migration path.
 - The frontend falls back to `VITE_SIDECAR_PORT` / `VITE_SIDECAR_TOKEN` environment
   variables, so the UI is fully developable without a Rust toolchain installed.
 
+### Verified in practice (2026-08-21)
+
+`src-tauri/` is scaffolded and dev-mode sidecar supervision (`src-tauri/src/lib.rs`)
+is implemented and verified against a real running window: `npm run tauri dev` builds
+the shell, spawns the sidecar, reads the handshake, injects `window.__PLACEINATOR__`,
+and shows the real authenticated UI end to end. Closing the window kills the sidecar
+with zero orphaned processes.
+
+Two real environment problems surfaced getting the Rust toolchain working on this
+machine, neither specific to this project's code, both worth recording since they cost
+real time and neither has an obvious error message:
+
+1. **Git for Windows' `link.exe` shadowed the real MSVC linker.** Git ships a coreutils
+   hard-link utility at `usr/bin/link.exe`; if it resolves ahead of MSVC's linker on
+   `PATH` (it did here, since MSVC's linker is never added to `PATH` directly), rustc
+   invokes the wrong one and fails with `"extra operand ... Try 'link --help'"` --
+   coreutils' error format, easy to mistake for an MSVC problem when it's really a name
+   collision.
+2. **A brand-new Visual Studio release wasn't recognized by this toolchain's bundled
+   detection.** Neither `rustup-init`'s C++-prerequisite check nor `rustc`'s own
+   `cc`-crate-based MSVC auto-detection (which normally locates the linker and sets
+   `LIB`/`INCLUDE` by querying the VS installation) recognized "Visual Studio 18" /
+   Build Tools 2026 -- confirmed independently via `vswhere`, which found a complete,
+   correct installation the other two tools missed. `rustup`'s legacy
+   `HKLM\...\VisualStudio\SxS\VS7`/`VC7` registry-key check was also empty, since
+   modern VS no longer populates those keys at all.
+
+Both are fixed with an explicit, per-user `C:\Users\<user>\.cargo\config.toml` --
+**not committed to the repo** (it's machine-specific, and CI's `windows-latest` runner
+ships a VS version its bundled detection already recognizes, so it needs none of this):
+a pinned `linker` path, `LIB`/`INCLUDE` set to what `vcvarsall.bat` would set, and
+`CC`/`CXX`/`AR` pinned to the real `cl.exe`/`lib.exe` -- the latter needed because a
+`tauri-build` build-dependency (`vswhom-sys`) compiles its own small C++ helper at
+build time via the `cc` crate, a separate bootstrapping need from rustc's own final
+link step, and hit the exact same "tool not found" problem for the same underlying
+reason.
+
 ---
 
 ## ADR 0002 — Deterministic engine, no LLM generation

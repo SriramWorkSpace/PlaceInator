@@ -5,7 +5,7 @@ lives in [architecture.md](./architecture.md) and [decisions/](./decisions/).
 
 ## M0 — Foundation
 
-*Substantially complete.*
+*Desktop shell up in dev mode; packaged build remains.*
 
 Done:
 
@@ -14,13 +14,26 @@ Done:
 - React + TypeScript + Vite + Tailwind frontend with a typed API client
 - App shell with seven routes and empty states
 - CI, documentation set, repository structure
+- Rust + MSVC Build Tools installed and verified (a real crate built, linked, and ran)
+- `src-tauri/` scaffolded; dev-mode sidecar supervision implemented and verified live:
+  `npm run tauri dev` builds the Rust shell, spawns
+  `.venv/Scripts/python.exe -m placeinator.main`, blocks on a background thread reading
+  its stdout for the `PLACEINATOR_READY` handshake line (bounded by a 30s timeout so a
+  sidecar that never starts fails loudly rather than hanging the window forever),
+  injects `window.__PLACEINATOR__` via `initialization_script` before the frontend's
+  first API call, and shows the real authenticated UI. Closing the window sends
+  `RunEvent::ExitRequested`, which kills the sidecar -- verified with a real window
+  close (not a force-kill): zero orphaned `python.exe`/`node.exe` processes survived it.
 
 Remaining:
 
-- Install Rust + MSVC build tools **(the only outstanding blocker)**
-- Scaffold `src-tauri/`; implement sidecar supervision: spawn, read the handshake line,
-  inject into the WebView, terminate on exit
-- Wire PyInstaller onedir to `bundle.externalBin`
+- Wire PyInstaller onedir to `bundle.externalBin` (deliberately deferred rather than
+  bundled into the same pass as the first Rust code this repo has ever had — see
+  `docs/decisions.md`'s ADR 0001 addendum)
+- A Windows Job Object (or similar) so the sidecar is reliably killed even if the shell
+  crashes rather than exits cleanly -- today's `child.kill()` on `ExitRequested` handles
+  the normal case but not a hard crash
+- CI has no Rust/Tauri job yet
 
 **Prove the packaged build now, not at M6.** onnxruntime's native libraries are the
 likeliest packaging problem, so add `fastembed` to the bundle test as soon as M1
