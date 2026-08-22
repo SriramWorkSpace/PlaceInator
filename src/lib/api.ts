@@ -18,6 +18,9 @@ import type {
   JobSearchOut,
   ManualJobIn,
   MatchOut,
+  PlacementConnectionStatus,
+  PlacementRecordOut,
+  PlacementTimeline,
   ProfileIn,
   ProfileOut,
   ResumeOut,
@@ -87,6 +90,14 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     throw new Error(`${response.status}: ${detail}`);
   }
 
+  // 204 No Content (and any other genuinely empty body) has nothing to
+  // parse -- response.json() throws a SyntaxError on an empty string.
+  // Placement's sync/disconnect/reject endpoints are this project's first
+  // 204 responses; every prior endpoint always returned a JSON body, so
+  // this never came up before.
+  if (response.status === 204) {
+    return undefined as T;
+  }
   return (await response.json()) as T;
 }
 
@@ -231,3 +242,49 @@ export const rankResumesForJob = (jobId: number) =>
  * toggling `excluded_bullet_ids` and calling again is the normal flow. */
 export const tailorResume = (data: TailorIn) =>
   apiFetch<TailorOut>("/api/latex/tailor", { method: "POST", body: JSON.stringify(data) });
+
+// -- Placement automation (spec §7) -----------------------------------------
+
+/** Thrown when a placement action needs a connected Gmail account and there
+ * isn't one -- distinct from NotOnboardedError, which is about the profile. */
+export class GmailNotConnectedError extends Error {}
+
+export const getPlacementStatus = () =>
+  apiFetch<PlacementConnectionStatus>("/api/placement/status");
+
+/** Opens the user's browser for the Google OAuth consent screen and blocks
+ * until they approve or the request times out -- expect this call to take
+ * as long as the user takes to click through the browser flow. */
+export const connectGmail = () =>
+  apiFetch<PlacementConnectionStatus>("/api/placement/connect", { method: "POST" });
+
+export const disconnectGmail = () =>
+  apiFetch<void>("/api/placement/disconnect", { method: "POST" });
+
+/** Runs one sync: fetches new mail since the last sync, extracts candidate
+ * matches and events, and files anything below the auto-accept confidence
+ * into the review queue rather than acting on a guess. */
+export async function syncPlacementMail(): Promise<void> {
+  try {
+    await apiFetch<void>("/api/placement/sync", { method: "POST" });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      if (err.message.toLowerCase().includes("gmail")) {
+        throw new GmailNotConnectedError("Gmail is not connected");
+      }
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+export const listPlacementReviewQueue = () =>
+  apiFetch<PlacementRecordOut[]>("/api/placement/review-queue");
+
+export const confirmPlacementRecord = (recordId: number) =>
+  apiFetch<PlacementRecordOut>(`/api/placement/review/${recordId}/confirm`, { method: "POST" });
+
+export const rejectPlacementRecord = (recordId: number) =>
+  apiFetch<void>(`/api/placement/review/${recordId}/reject`, { method: "POST" });
+
+export const getPlacementTimeline = () => apiFetch<PlacementTimeline>("/api/placement/timeline");

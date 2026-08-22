@@ -102,6 +102,12 @@ class Preferences(Base, TimestampMixin):
         Float, default=0.6, server_default=sa.text("0.6")
     )
 
+    # Gmail API's `history.list` cursor (spec §7). None means "never synced" --
+    # the next sync falls back to a bounded initial `messages.list` scan
+    # instead. Not the OAuth token itself, which lives in the OS keychain,
+    # never here -- see placeinator.placement.auth.
+    gmail_last_history_id: Mapped[str | None] = mapped_column(String(64))
+
     profile: Mapped[Profile] = relationship(back_populates="preferences")
 
 

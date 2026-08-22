@@ -9,6 +9,56 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **M4: Placement automation** (spec §7) — Gmail → attachments → candidate
+  identification → status/event extraction → duplicate-safe persistence →
+  Calendar. New `placeinator/placement/` package:
+  - **OAuth + OS-keychain token storage** (`auth.py`): the refresh token
+    never touches SQLite or a file — stored via `keyring`, confirmed against
+    the real Windows Credential Manager backend before any code depended on
+    it. `POST /api/placement/connect` runs the blocking loopback flow
+    (`run_local_server`) inside `asyncio.to_thread` so the sidecar's event
+    loop stays free while the user approves in their browser.
+  - **Incremental Gmail fetch via `historyId`** (`gmail.py`), falling back
+    to a bounded initial scan on first connect or when Gmail no longer
+    retains history back to a stale cursor. New
+    `Preferences.gmail_last_history_id` column persists the cursor.
+  - **Header normalization** (`headers.py`): synonym dictionary matching
+    spec's own worked example verbatim, `rapidfuzz` fallback for anything
+    else — ADR 0002's exact commitment.
+  - **Confidence-scored candidate identification** (`candidates.py`):
+    email/student-ID/fuzzy-name signals each contribute a weighted share,
+    calibrated so a single strong name match (spec's own example has *only*
+    a name column) clears the review-queue floor on its own, while
+    auto-accept requires a second corroborating signal.
+  - **Status/event extraction** (`classification.py`, `events.py`) via
+    keyword rules + `dateparser` — no LLM. Fixed a real bug found by its own
+    test suite: checking SHORTLISTED phrases before REJECTED misclassified
+    "Not shortlisted" as SHORTLISTED, since "shortlisted" is a substring of
+    the negation.
+  - **Duplicate detection** is `PlacementEvent.dedupe_key`'s existing unique
+    constraint doing its real job — the service layer upserts against it;
+    verified with a real two-sync integration test.
+  - **Calendar integration** (`calendar.py`), `calendar.events` scope only,
+    explicit local timezone via `tzlocal` rather than assuming UTC.
+  - **A free-text date-scanning approach for plain email bodies was tried
+    and deliberately dropped**: `dateparser.search.search_dates` produces
+    false positives on ordinary prose (confirmed live — "we" alone parsed
+    as a date against realistic email text). A plain-body message mentioning
+    an event lands in the review queue instead of risking a wrong date on a
+    real calendar.
+  - Real bug fixed during integration testing: the service layer always
+    used the email sender's guessed display name as `PlacementRecord
+    .company`, even when a structured attachment row had its own, more
+    reliable Company column — the row's value now takes priority.
+  - `POST/GET /api/placement/*` endpoints and a rebuilt
+    `src/routes/Placement.tsx` (sync control, review queue with
+    confirm/reject, company timeline); Settings' Connected Accounts section
+    now has a real Connect/Disconnect control, replacing its former
+    "Coming in M4" placeholder.
+  - **OCR for scanned-image attachments is explicitly out of scope for this
+    slice** — Tesseract isn't installed on the dev machine, and installing
+    it is its own separate system-level dependency. Degrades honestly
+    (`OcrUnavailableError`, caught upstream) rather than crashing.
 - **M0: `src-tauri/` scaffolded, dev-mode sidecar supervision working end to end.**
   `npm run tauri dev` now builds the Rust shell, spawns
   `.venv/Scripts/python.exe -m placeinator.main`, reads its `PLACEINATOR_READY`

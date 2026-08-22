@@ -8,9 +8,18 @@ import {
   LinkIcon,
   LogoutIcon,
 } from "@/components/icons";
+import { Button, ErrorText } from "@/components/Form";
 import { Page, SectionCard } from "@/components/Page";
 import { Switch } from "@/components/ui/switch";
-import { getProfile, getStatus, NotOnboardedError, putProfile } from "@/lib/api";
+import {
+  connectGmail,
+  disconnectGmail,
+  getPlacementStatus,
+  getProfile,
+  getStatus,
+  NotOnboardedError,
+  putProfile,
+} from "@/lib/api";
 import { PALETTES, usePalette, type Palette } from "@/lib/palette";
 import { useTheme } from "@/lib/theme";
 import { DEFAULT_PREFERENCES, type ProfileIn } from "@/lib/types";
@@ -192,13 +201,25 @@ function NotificationsSection() {
 }
 
 /**
- * Honest about what's real: Google OAuth is M4 scope and isn't wired up
- * yet, so this never pretends a "Connect" button would do anything. Indeed/
- * LinkedIn/Naukri are already usable from the Jobs page without connecting
- * an account at all -- they're search targets, not accounts you sign into
- * from here -- so that distinction is spelled out rather than left implicit.
+ * Google (Gmail & Calendar) is real M4 scope now -- connect/disconnect
+ * actually work. Indeed/LinkedIn/Naukri still need no connected account
+ * here; that distinction is spelled out rather than left implicit.
  */
 function ConnectedAccountsSection() {
+  const queryClient = useQueryClient();
+  const { data } = useQuery({ queryKey: ["placement", "status"], queryFn: getPlacementStatus });
+
+  const connect = useMutation({
+    mutationFn: connectGmail,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["placement", "status"] }),
+  });
+  const disconnect = useMutation({
+    mutationFn: disconnectGmail,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["placement", "status"] }),
+  });
+
+  const connected = data?.connected ?? false;
+
   return (
     <SectionCard
       eyebrow="Connected accounts"
@@ -219,13 +240,32 @@ function ConnectedAccountsSection() {
               </p>
             </div>
           </div>
-          <span
-            className="shrink-0 rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
-            style={{ background: "var(--canvas-inset)", color: "var(--fg-subtle)" }}
-          >
-            Coming in M4
-          </span>
+          {connected ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="shrink-0"
+              disabled={disconnect.isPending}
+              onClick={() => disconnect.mutate()}
+            >
+              {disconnect.isPending ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="soft"
+              className="shrink-0"
+              disabled={connect.isPending}
+              onClick={() => connect.mutate()}
+            >
+              {connect.isPending ? "Waiting for browser…" : "Connect"}
+            </Button>
+          )}
         </div>
+
+        {connect.isError && (
+          <ErrorText onDismiss={() => connect.reset()}>{(connect.error as Error).message}</ErrorText>
+        )}
 
         <p className="text-xs" style={{ color: "var(--fg-subtle)" }}>
           Indeed, LinkedIn, and Naukri don't need a connected account here — searching them from

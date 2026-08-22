@@ -227,3 +227,39 @@ export interface TailorOut {
   requirements_matched: string[];
   requirements_missing: string[];
 }
+
+// -- Placement automation (spec §7) -----------------------------------------
+
+export interface PlacementConnectionStatus {
+  connected: boolean;
+}
+
+export interface PlacementEventOut {
+  id: number;
+  company: string;
+  event_type: string;
+  round_name: string | null;
+  /** ISO date (YYYY-MM-DD), or null if no date was extracted. */
+  event_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  reporting_time: string | null;
+  venue: string | null;
+  meeting_link: string | null;
+  instructions: string | null;
+  calendar_event_id: string | null;
+  needs_review: boolean;
+}
+
+export interface PlacementRecordOut {
+  id: number;
+  company: string | null;
+  status: string;
+  match_confidence: number;
+  needs_review: boolean;
+  matched_on: string[];
+  source_document: string | null;
+  events: PlacementEventOut[];
+}
+
+export type PlacementTimeline = Record<string, PlacementRecordOut[]>;

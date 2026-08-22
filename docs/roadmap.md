@@ -195,14 +195,81 @@ doesn't get its argument captured as a child node at all.
 
 ## M4 — Placement automation
 
-- Gmail read-only OAuth (loopback flow), incremental fetch via `historyId`
-- Email classification over the spec's categories
-- Attachment processing: XLSX, PDF, DOCX, and scanned images where Tesseract exists
-- Header normalization via synonym dictionary + `rapidfuzz` fuzzy matching
-- Tiered candidate identification with a **review queue** below the auto-accept
-  threshold — never a silent guess
-- Status classification, event extraction, duplicate detection, Calendar integration
-- Placement timeline per company
+*Complete, except OCR for scanned images (see below).* New
+`placeinator/placement/` package implements the full spec §7 pipeline: Gmail
+fetch → attachment parsing → header normalization → candidate identification
+→ status/event extraction → duplicate-safe persistence → Calendar.
+
+- **Gmail OAuth (loopback flow), OS-keychain token storage.** The refresh
+  token is stored via `keyring` (confirmed against the real Windows
+  Credential Manager backend before any code depended on it) — never in
+  SQLite, never in a plain file. `architecture.md`'s system diagram places
+  "OAuth token storage (OS keychain)" in the Tauri shell's box, but Python
+  has its own direct keychain bindings, so none of this needed a round trip
+  through Rust. `POST /api/placement/connect` runs the blocking
+  `run_local_server` loopback flow inside `asyncio.to_thread`, so the one
+  request stays open while the user approves in their browser without
+  blocking the rest of the sidecar.
+- **Incremental fetch via `historyId`** (`placeinator/placement/gmail.py`),
+  falling back to a bounded initial scan when there's no cursor yet, or when
+  Gmail no longer retains history back to a stale one (a real `404`, not a
+  hypothetical). `Preferences.gmail_last_history_id` persists the cursor —
+  `Preferences` was already the single-row "app-wide settings" table
+  (`notification_threshold` lives there the same way).
+- **Header normalization** (`placeinator/placement/headers.py`): a
+  synonym dictionary matching spec's own worked example verbatim
+  ("Student Name"/"Applicant" → `candidate`, "Result"/"Selection Status" →
+  `status`, ...), falling back to `rapidfuzz` fuzzy matching for anything not
+  named explicitly — ADR 0002's exact commitment for this milestone.
+- **Candidate identification with a genuine confidence score**
+  (`placeinator/placement/candidates.py`), not a single all-or-nothing check
+  — email, student ID, and fuzzy name matches (including
+  `Profile.name_aliases`) each contribute a weighted share. Weights are
+  calibrated against spec's own worked example, which has *only* a name
+  column: a single strong name match clears the review-queue floor on its
+  own, and auto-accept requires a second corroborating signal — a lone
+  match, however exact, stays in the **review queue** rather than being
+  silently accepted.
+- **Status/event extraction** (`placeinator/placement/classification.py`,
+  `events.py`) via keyword rules and `dateparser` — no LLM anywhere (ADR
+  0002). A real bug surfaced and was fixed here: checking the SHORTLISTED
+  phrase list before REJECTED's classified "Not shortlisted" as
+  SHORTLISTED, since "shortlisted" is a substring of the negation. REJECTED
+  is now checked first.
+- **Duplicate detection is the existing `PlacementEvent.dedupe_key` unique
+  constraint doing its actual job** — `sha256(company, event_type, date,
+  start_time)`, normalized so formatting/casing differences on the same
+  real event still produce the same key. The service layer upserts against
+  it rather than blind-inserting; verified with a real two-sync test that
+  the second sync creates no duplicate.
+- **Calendar integration** (`placeinator/placement/calendar.py`), same OAuth
+  credential, `calendar.events` scope only (event creation, not full
+  calendar control). Explicit local timezone (`tzlocal`, already a
+  transitive dependency of `dateparser`) rather than assuming UTC, which
+  would have misplaced every event.
+- **A free-text date-scanning approach was tried and deliberately dropped**
+  for plain email bodies (no structured attachment): `dateparser.search
+  .search_dates` produces false positives on ordinary prose — the word "we"
+  alone parsed as a date in a real test against realistic email text.
+  Silently creating a calendar event from a wrong guessed date is worse than
+  not creating one, so a plain-body message that mentions an event lands in
+  the review queue for a human to read and act on, rather than an
+  auto-extracted (and possibly wrong) date ever reaching a real calendar.
+- `POST/GET /api/placement/{connect,disconnect,status,sync,review-queue,
+  review/{id}/{confirm,reject},timeline}` and a rebuilt
+  `src/routes/Placement.tsx` (sync control, review queue with confirm/reject,
+  company timeline) plus a real Connect/Disconnect control on the Settings
+  page's Connected Accounts section, replacing its former "Coming in M4"
+  placeholder.
+- **Scanned-image attachments (OCR) are explicitly out of scope for this
+  slice.** Tesseract isn't installed on the dev machine — installing it is
+  its own separate system-level dependency, the same risk class as the
+  Rust/MSVC and Google Cloud OAuth setups this project has already worked
+  through individually. A scanned attachment degrades honestly
+  (`OcrUnavailableError`, caught upstream, sync continues) rather than
+  crashing or silently dropping the promise `resumes/parsing.py`'s own
+  `EmptyDocumentError` docstring made about M4 adding Tesseract support —
+  real OCR is a fast, isolated follow-up once Tesseract is installed.
 
 ## M5 — Career intelligence and outreach
 
