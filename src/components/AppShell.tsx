@@ -6,7 +6,7 @@ import { NavLink, useLocation, useOutlet } from "react-router-dom";
 import logo from "@/assets/logo.png";
 import { DarkModeIcon, LightModeIcon, MenuIcon, PersonIcon } from "@/components/icons";
 import { Switch } from "@/components/ui/switch";
-import { getProfile, NotOnboardedError } from "@/lib/api";
+import { getModelStatus, getProfile, NotOnboardedError } from "@/lib/api";
 import { NAV_ITEMS, SETTINGS_ITEM, type NavItem } from "@/lib/nav";
 import { useTheme } from "@/lib/theme";
 
@@ -29,12 +29,15 @@ export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex h-full">
-      <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        <PageTransition />
-      </main>
-      <ThemeToggle />
+    <div className="flex h-full flex-col">
+      <ModelDownloadBanner />
+      <div className="flex min-h-0 flex-1">
+        <Sidebar collapsed={collapsed} onToggleCollapsed={() => setCollapsed((c) => !c)} />
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <PageTransition />
+        </main>
+        <ThemeToggle />
+      </div>
     </div>
   );
 }
@@ -43,6 +46,65 @@ export function AppShell() {
 // takes a literal array, not a CSS var, so the value is duplicated here
 // rather than forked into a different-looking one.
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
+
+/**
+ * First-run-only: the embedding model (M6, ADR 0005) downloads to disk the
+ * first time the sidecar starts with no network cache yet. Polls
+ * /api/matching/model-status every 2s only while not ready -- lightweight
+ * and DB-free by design (see the endpoint's own docstring) -- and stops
+ * polling for the rest of the session once ready, since the model never
+ * becomes un-ready again short of a restart.
+ *
+ * Lives in the shell rather than any one route so it stays visible no
+ * matter which page the user lands on -- a resume upload or job match on
+ * any page can hit the same not-ready model.
+ */
+function ModelDownloadBanner() {
+  const reduceMotion = useReducedMotion();
+  const { data } = useQuery({
+    queryKey: ["model-status"],
+    queryFn: getModelStatus,
+    refetchInterval: (query) => (query.state.data?.ready ? false : 2000),
+  });
+
+  const show = data?.downloading ?? false;
+  const percent = Math.round((data?.approx_progress ?? 0) * 100);
+
+  return (
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: reduceMotion ? 0 : -8 }}
+          transition={{ duration: reduceMotion ? 0 : 0.2, ease: EASE_OUT }}
+          className="flex shrink-0 items-center gap-3 border-b px-4 py-2 text-sm"
+          style={{ borderColor: "var(--border)", background: "var(--accent-subtle)" }}
+        >
+          <span style={{ color: "var(--fg)" }}>
+            Setting up the matching model (one-time download)&hellip;
+          </span>
+          <div
+            className="h-1.5 w-40 shrink-0 overflow-hidden rounded-full"
+            style={{ background: "var(--canvas-subtle)" }}
+          >
+            <div
+              className="h-full w-full origin-left rounded-full"
+              style={{
+                background: "var(--accent)",
+                transform: `scaleX(${data?.approx_progress ?? 0})`,
+                transitionProperty: reduceMotion ? "none" : "transform",
+                transitionDuration: "400ms",
+                transitionTimingFunction: "var(--ease-out)",
+              }}
+            />
+          </div>
+          <span style={{ color: "var(--fg-muted)" }}>{percent}%</span>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 /**
  * Fades the leaving route out, then fades the arriving one in.

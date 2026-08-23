@@ -64,6 +64,8 @@ The whole point of this stack. Targets, and what makes each achievable:
 | Embed one resume (~40 chunks) | < 200 ms | ONNX Runtime CPU, int8, batched |
 | Rank 500 cached jobs | < 50 ms | Precomputed vectors, one NumPy matmul |
 | Tailor a resume | < 2 s | Parse + score + splice, no network |
+
+`tests/integration/test_latency.py` measures and prints the first four rows on every CI run (loose bounds, not the tight targets, so hardware variance doesn't make them flaky). Cold-start-to-interactive and idle memory stay manual verification — one needs the real Rust/WebView shell, the other is an OS-level process metric, neither reachable from a pytest process.
 | Idle memory | ~120 MB | Native WebView, no bundled browser engine |
 
 ## Module map
@@ -98,15 +100,16 @@ Root modules: `app.py` (application factory), `main.py` (entry point and handsha
 | M3 — LaTeX Tailoring | Complete, except PDF compile |
 | M4 — Placement Automation | Complete, except OCR for scanned images |
 | M5 — Career Intelligence & Outreach | Complete |
-| M6 — Hardening & Release | Not started |
+| M6 — Hardening & Release | Complete, except the PyInstaller/NSIS installer |
 
 **Deliberately deferred**, each flagged at the time it was skipped rather than
 silently dropped:
 
-- **PyInstaller bundling** (M0) — onnxruntime's native libraries are flagged
-  in two ADRs (0001, 0005) as the likely packaging problem; wiring
-  `bundle.externalBin` is separate, riskier work that wasn't bundled into the
-  same pass as the first Rust code this repo ever had.
+- **PyInstaller bundling and the NSIS installer** (deferred at M0, still the
+  only open M6 item) — onnxruntime's native libraries are flagged in two ADRs
+  (0001, 0005) as the likely packaging problem; wiring `bundle.externalBin`
+  is separate, riskier work, kept as its own follow-up rather than bundled
+  into the same pass as the rest of M6's hardening.
 - **A Windows Job Object** (M0) — today's `child.kill()` on the shell's
   `ExitRequested` event only guarantees the sidecar dies on a clean window
   close, not a hard crash.

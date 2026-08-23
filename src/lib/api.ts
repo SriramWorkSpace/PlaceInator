@@ -19,6 +19,7 @@ import type {
   JobSearchOut,
   ManualJobIn,
   MatchOut,
+  ModelStatusOut,
   OutreachDraftOut,
   OutreachTargetOut,
   PlacementConnectionStatus,
@@ -238,6 +239,11 @@ export function extractJobFromFile(params: {
 
 export const rankResumesForJob = (jobId: number) =>
   apiFetch<MatchOut[]>(`/api/matching/jobs/${jobId}/rank-resumes`, { method: "POST" });
+
+/** Polled by AppShell's first-run download banner. DB-free and gated by
+ * neither onboarding nor profile state, so it's safe to call before either
+ * exists. */
+export const getModelStatus = () => apiFetch<ModelStatusOut>("/api/matching/model-status");
 
 // -- Latex -------------------------------------------------------------------
 

@@ -30,8 +30,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **M6: Hardening and release** (roadmap, scoped: everything except the
+  installer, which stays its own follow-up — see "Deliberately deferred"
+  above). One real gap remained after research: the embedding model's
+  first-run download had no error handling at all, so a network failure
+  during it propagated whatever raw exception `huggingface_hub`/
+  `onnxruntime` happened to raise.
+  - `placeinator/matching/vectors.py::ModelDownloadError` wraps that failure
+    into one catchable type; a new global
+    `@app.exception_handler(ModelDownloadError)` in `app.py` turns it into a
+    clean 503 across every route that touches embeddings (resumes, jobs,
+    latex, career, outreach), rather than scattering try/except through each
+    one individually.
+  - `get_model_download_status()` reports ready/downloading/not-started by
+    polling bytes already on disk under `Settings.models_dir` against the
+    model's real measured size (~64 MB — the ADR 0005 estimate of ~130 MB
+    was double the actual quantized weights, corrected here). Deliberately
+    not hooked into `huggingface_hub`'s internal `tqdm_class` mechanism for
+    byte-exact progress — that would mean depending on kwargs forwarding
+    correctly through three layers of undocumented library internals.
+  - The sidecar's `lifespan` now warms the model up in the background via
+    `asyncio.to_thread` right after startup, so the first real resume
+    upload doesn't stall on a multi-second (or, offline, much longer) load.
+  - New `GET /api/matching/model-status`, polled by a `ModelDownloadBanner`
+    in `AppShell.tsx` (shell chrome, so it's visible regardless of which
+    page loads first) every 2s only while not ready; stops polling once
+    ready and renders nothing the rest of the session.
+  - `tests/integration/test_latency.py` profiles the app against
+    `architecture.md`'s latency budget: sidecar startup, embedding one
+    resume, ranking 500 cached jobs, and tailoring a resume are all now
+    measured on every CI run against loose bounds (several times the
+    target, so hardware variance doesn't make them flaky while a real 10x
+    regression still fails the build). Full cold-start-to-interactive and
+    idle memory stay manual verification — neither is reachable from a
+    pytest process.
+
 - **M5: Career intelligence and outreach** (spec §4, §6) — the final
-  feature milestone; only M6 (hardening/release) remains.
+  feature milestone; only M6 (hardening/release) remained.
   - **Skill-gap analysis needs no new database table.** It's a pure
     aggregation over data already kept fresh (`Job.required_skill_ids`,
     `ResumeChunk.skill_ids`, `rank_jobs`'s scores), the same "computed

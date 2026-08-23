@@ -314,3 +314,12 @@ export interface OutreachDraftOut {
   subject: string;
   body: string;
 }
+
+// -- Model download status (M6 hardening) -------------------------------------
+
+export interface ModelStatusOut {
+  ready: boolean;
+  downloading: boolean;
+  /** 0..1. Meaningless once ready (always 1.0); approximate while downloading. */
+  approx_progress: number;
+}

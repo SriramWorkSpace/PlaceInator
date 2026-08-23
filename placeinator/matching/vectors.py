@@ -12,6 +12,7 @@ ADR 0005. PyTorch must never enter this module's dependency chain.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
@@ -19,17 +20,36 @@ from fastembed import TextEmbedding
 
 from placeinator.settings import get_settings
 
-# 384-dim, ~130 MB. Changing this value invalidates every stored embedding; any
-# row whose embedding_model no longer matches EMBEDDING_MODEL_NAME is stale.
+# 384-dim, ~64 MB (the quantized ONNX weights fastembed actually downloads --
+# measured directly off disk, not the ~130 MB figure ADR 0005 estimated
+# before this was checked). Changing EMBEDDING_MODEL_NAME invalidates every
+# stored embedding; any row whose embedding_model no longer matches it is
+# stale.
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
 _DTYPE = np.float32
+
+# Measured directly (model_optimized.onnx under Settings.models_dir), not
+# assumed from ADR 0005's "~130 MB" estimate -- that figure was double the
+# real quantized weights' size. Used only to estimate download progress (see
+# get_model_download_status); approximate by nature, not a correctness
+# dependency of anything else in this module.
+_APPROX_MODEL_SIZE_BYTES = 64 * 1024 * 1024
+
+
+class ModelDownloadError(RuntimeError):
+    """The embedding model couldn't be downloaded or loaded -- almost always
+    a network failure on first run, since every run after that reads from
+    the local cache. Wraps whatever fastembed/huggingface_hub/onnxruntime
+    happens to raise into one clear, catchable type, so callers (and the
+    global FastAPI exception handler in placeinator/app.py) don't need to
+    know those libraries' own exception hierarchies."""
 
 
 @lru_cache(maxsize=1)
 def _model() -> TextEmbedding:
     # Loaded lazily and cached: importing fastembed is cheap, but constructing
-    # the model reads ~130 MB from disk (downloading it on first run), which
+    # the model reads ~64 MB from disk (downloading it on first run), which
     # must not happen at process import time.
     #
     # cache_dir is pinned to Settings.models_dir explicitly. fastembed's own
@@ -37,7 +57,69 @@ def _model() -> TextEmbedding:
     # packaged install resolve the model to two different places -- the same
     # inconsistency the models/ directory removal fixed elsewhere.
     settings = get_settings()
-    return TextEmbedding(model_name=EMBEDDING_MODEL_NAME, cache_dir=str(settings.models_dir))
+    try:
+        return TextEmbedding(model_name=EMBEDDING_MODEL_NAME, cache_dir=str(settings.models_dir))
+    except Exception as exc:
+        raise ModelDownloadError(
+            f"could not load the embedding model ({EMBEDDING_MODEL_NAME}): {exc}"
+        ) from exc
+
+
+def warm_up_model() -> None:
+    """Public entry point for triggering the model load/download without
+    needing anything embedded yet -- placeinator/app.py's startup warm-up
+    calls this rather than reaching into the private, lazily-cached
+    _model() directly."""
+    _model()
+
+
+@dataclass(frozen=True)
+class ModelDownloadStatus:
+    ready: bool
+    downloading: bool
+    # 0..1. Meaningless once ready (always 1.0); approximate while
+    # downloading, since it's based on bytes written to disk, not the
+    # ONNX session initialization that follows the download itself.
+    approx_progress: float
+
+
+def get_model_download_status() -> ModelDownloadStatus:
+    """Polls actual bytes on disk under Settings.models_dir against the
+    known approximate model size, rather than hooking huggingface_hub's
+    internal tqdm_class mechanism for byte-exact progress -- that would mean
+    depending on kwargs correctly forwarding through three layers of
+    fastembed/huggingface_hub internals (TextEmbedding.__init__ ->
+    download_model -> download_files_from_huggingface -> snapshot_download),
+    none of which is a documented, stable contract. Slower to update, but
+    doesn't depend on anything that could silently break on a library
+    upgrade.
+
+    ``cache_info().currsize`` alone can't answer "ready": it only reflects
+    whether *this process* has called ``_model()``, not whether a prior run
+    already wrote the model to disk. A plain restart would otherwise report
+    "downloading" for however long it takes the background warm-up
+    (placeinator/app.py's lifespan) to catch up -- misleading, since loading
+    an already-cached model from disk is fast and nothing like a fresh
+    network download.
+    """
+    if _model.cache_info().currsize > 0:
+        return ModelDownloadStatus(ready=True, downloading=False, approx_progress=1.0)
+
+    settings = get_settings()
+    if not settings.models_dir.exists():
+        return ModelDownloadStatus(ready=False, downloading=False, approx_progress=0.0)
+
+    total_bytes = sum(f.stat().st_size for f in settings.models_dir.rglob("*") if f.is_file())
+    if total_bytes == 0:
+        return ModelDownloadStatus(ready=False, downloading=False, approx_progress=0.0)
+
+    progress = min(total_bytes / _APPROX_MODEL_SIZE_BYTES, 1.0)
+    if progress >= 0.98:
+        # Close enough to the full known size that this is almost certainly
+        # a complete download from a prior run, not one in progress.
+        return ModelDownloadStatus(ready=True, downloading=False, approx_progress=1.0)
+
+    return ModelDownloadStatus(ready=False, downloading=True, approx_progress=progress)
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:

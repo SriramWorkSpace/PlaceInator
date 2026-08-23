@@ -14,9 +14,16 @@ from sqlalchemy.orm import Session
 from placeinator.db.models import Job, MatchResult
 from placeinator.db.session import get_session
 from placeinator.matching.service import rank_resumes_for_job
+from placeinator.matching.vectors import get_model_download_status
 from placeinator.profile.service import get_profile
 
 router = APIRouter(prefix="/api/matching", tags=["matching"])
+
+
+class ModelStatusOut(BaseModel):
+    ready: bool
+    downloading: bool
+    approx_progress: float
 
 
 class MatchOut(BaseModel):
@@ -38,6 +45,20 @@ def _to_out(result: MatchResult) -> MatchOut:
         semantic_score=result.semantic_score,
         personalized_score=result.personalized_score,
         explanation=result.explanation,
+    )
+
+
+@router.get("/model-status", response_model=ModelStatusOut)
+def read_model_status() -> ModelStatusOut:
+    """Polled by the frontend's first-run download banner (AppShell) --
+    lightweight and DB-free by design, since it's meant to be polled every
+    couple of seconds during a download, unlike /api/status's DB health
+    check."""
+    model_status = get_model_download_status()
+    return ModelStatusOut(
+        ready=model_status.ready,
+        downloading=model_status.downloading,
+        approx_progress=model_status.approx_progress,
     )
 
 

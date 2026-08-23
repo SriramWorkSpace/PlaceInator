@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from placeinator.api import (
     career,
@@ -20,10 +22,25 @@ from placeinator.api import (
     resumes,
 )
 from placeinator.db.migrate import upgrade_to_head
+from placeinator.matching.vectors import ModelDownloadError, warm_up_model
 from placeinator.security import require_token
 from placeinator.settings import get_settings
 
 log = logging.getLogger("placeinator")
+
+
+def _warm_up_embedding_model() -> None:
+    """Best-effort: get the model loading (or downloading, on a genuine
+    first run) before the user's first resume upload needs it, rather than
+    stalling that request. A failure here isn't fatal and isn't reported --
+    _model() isn't cached on failure (lru_cache never caches an exception),
+    so the same attempt happens again and surfaces properly as a 503 via the
+    ModelDownloadError handler below, the moment a real request actually
+    needs it."""
+    try:
+        warm_up_model()
+    except ModelDownloadError:
+        log.warning("embedding model warm-up failed; will retry on first real use")
 
 
 @asynccontextmanager
@@ -36,6 +53,17 @@ async def lifespan(app: FastAPI):
     # and leave alembic_version empty, so the first real migration would try to
     # build tables that already exist.
     upgrade_to_head()
+
+    # Scheduled as a task, not awaited -- awaiting asyncio.to_thread directly
+    # would block the handshake on a multi-second (or, offline, much longer)
+    # model load. This must not slow down startup the way it would if it ran
+    # inline.
+    #
+    # The task object itself must be kept referenced somewhere for its whole
+    # lifetime -- asyncio only holds a weak reference internally, so an
+    # unreferenced task can be garbage-collected mid-run. app.state is this
+    # object's home for exactly that reason.
+    app.state.model_warm_up_task = asyncio.create_task(asyncio.to_thread(_warm_up_embedding_model))
 
     log.info("sidecar ready, data dir: %s", settings.data_dir)
     yield
@@ -77,5 +105,16 @@ def create_app() -> FastAPI:
     app.include_router(placement.router, dependencies=[protected])
     app.include_router(career.router, dependencies=[protected])
     app.include_router(outreach.router, dependencies=[protected])
+
+    # One handler for every route that touches embeddings (resumes, jobs,
+    # latex, career, outreach all end up calling into matching.vectors) --
+    # a network failure during the model's first-run download must surface
+    # as a clean 503, not a raw traceback, without scattering try/except
+    # across each of those modules individually.
+    @app.exception_handler(ModelDownloadError)
+    async def handle_model_download_error(
+        _request: Request, exc: ModelDownloadError
+    ) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     return app
