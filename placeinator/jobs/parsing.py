@@ -25,8 +25,9 @@ class UnsupportedJdFormatError(ValueError):
 
 class EmptyJdDocumentError(ValueError):
     """Raised when parsing succeeds but recovers no usable text -- almost
-    always a scanned/image-only PDF, which needs OCR (out of scope until
-    placement-attachment processing adds Tesseract support in M4)."""
+    always a scanned/image-only PDF, which needs OCR. M4 added OCR
+    (placeinator.placement.ocr, RapidOCR) for placement-sheet attachments
+    specifically -- scanned job descriptions remain out of scope here."""
 
 
 def parse_jd_bytes(data: bytes, source_format: JdSourceFormat) -> str:

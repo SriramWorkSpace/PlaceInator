@@ -20,18 +20,30 @@ Two source shapes are handled differently, deliberately:
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 from google.oauth2.credentials import Credentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from placeinator.db.models import PlacementEvent, PlacementRecord, Preferences, Profile
-from placeinator.placement import auth, calendar, candidates, classification, events, gmail, headers
+from placeinator.placement import (
+    auth,
+    calendar,
+    candidates,
+    classification,
+    events,
+    gmail,
+    headers,
+    ocr,
+)
 from placeinator.placement.gmail import FetchedMessage
 from placeinator.placement.parsing import OcrUnavailableError, parse_placement_sheet_bytes
 
-# Attachment filename extension -> parser format. Anything else (images,
-# .zip, ...) is skipped -- an image is exactly the deferred-OCR case (see
-# placeinator.placement.parsing.OcrUnavailableError).
+# Attachment filename extension -> parser format. Anything else (a raw
+# .jpg/.png attachment, .zip, ...) is skipped -- OCR (placeinator.placement.ocr)
+# only ever runs against a scanned *page inside a PDF*, not a bare image
+# attachment; that's enough of an edge case to leave out of this first pass.
 _EXTENSION_FORMATS: dict[str, str] = {"xlsx": "xlsx", "pdf": "pdf", "docx": "docx"}
 
 # A plain-body message mentioning one of these gets flagged for review even
@@ -89,11 +101,11 @@ def _process_message(
     if not classification.is_placement_related(message.subject, message.body_text):
         return
 
-    rows = _parse_attachments(message)
+    parsed = _parse_attachments(message)
     fallback_company = _guess_company_from_sender(message.sender)
 
-    if rows:
-        for row in rows:
+    if parsed.rows:
+        for row in parsed.rows:
             normalized = headers.normalize_row(row)
             match = candidates.identify_candidate(normalized, profile)
             if match is None:
@@ -108,6 +120,19 @@ def _process_message(
             extracted = events.extract_event(normalized, default_company=company or "")
             if extracted is not None:
                 _upsert_event(session, credentials, record, extracted)
+    elif parsed.ocr_text and candidates.mentions_candidate_in_text(parsed.ocr_text, profile):
+        # A scanned attachment (no structured table, so OCR was tried as a
+        # fallback -- see placeinator.placement.ocr) that plausibly mentions
+        # the candidate. Deliberately below AUTO_ACCEPT_CONFIDENCE no matter
+        # what: OCR'd text is meaningfully less reliable evidence than a
+        # real structured field match, so this always lands in the review
+        # queue for a human to read the original scan and decide, matching
+        # this module's own confidence-gating philosophy for anything less
+        # certain than that.
+        match = candidates.CandidateMatch(
+            confidence=candidates.MINIMUM_CONFIDENCE, matched_on=("ocr_text",)
+        )
+        _upsert_record(session, message, match, parsed.ocr_text, fallback_company)
     else:
         # No structured attachment -- the message landed in this connected
         # mailbox, which is itself the identifying signal (one profile per
@@ -123,21 +148,49 @@ def _process_message(
     session.flush()
 
 
-def _parse_attachments(message: FetchedMessage) -> list[dict[str, str]]:
+@dataclass(frozen=True)
+class _ParsedAttachments:
+    rows: list[dict[str, str]] = field(default_factory=list)
+    # Newline-joined OCR output across every scanned PDF attachment on this
+    # message -- never structured into rows, see placeinator.placement.ocr's
+    # own module docstring for why.
+    ocr_text: str = ""
+
+
+def _parse_attachments(message: FetchedMessage) -> _ParsedAttachments:
     rows: list[dict[str, str]] = []
+    ocr_texts: list[str] = []
+
     for attachment in message.attachments:
         has_extension = "." in attachment.filename
         extension = attachment.filename.rsplit(".", 1)[-1].lower() if has_extension else ""
         source_format = _EXTENSION_FORMATS.get(extension)
         if source_format is None:
             continue
+
         try:
-            rows.extend(parse_placement_sheet_bytes(attachment.data, source_format))  # type: ignore[arg-type]
+            attachment_rows = parse_placement_sheet_bytes(attachment.data, source_format)  # type: ignore[arg-type]
         except (OcrUnavailableError, ValueError):
             # A malformed or unreadable attachment shouldn't fail the whole
             # sync -- the message's own body is still processed.
-            continue
-    return rows
+            attachment_rows = []
+
+        if attachment_rows:
+            rows.extend(attachment_rows)
+        elif source_format == "pdf":
+            # No extractable table. Try OCR -- XLSX/DOCX don't get this
+            # fallback: XLSX is never a scan, and a scanned DOCX (an
+            # embedded picture, not a real page image) is enough of an edge
+            # case to leave out of this first pass rather than build and
+            # verify a second detection path for it.
+            try:
+                text = ocr.extract_text_via_ocr(attachment.data)
+            except OcrUnavailableError:
+                text = ""
+            if text:
+                ocr_texts.append(text)
+
+    return _ParsedAttachments(rows=rows, ocr_text="\n".join(ocr_texts))
 
 
 def _upsert_record(

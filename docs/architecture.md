@@ -98,7 +98,7 @@ Root modules: `app.py` (application factory), `main.py` (entry point and handsha
 | M1 — Profile, Resume, Matching | Complete |
 | M2 — Job Intelligence | Complete |
 | M3 — LaTeX Tailoring | Complete, PDF compile included (see note below) |
-| M4 — Placement Automation | Complete, except OCR for scanned images |
+| M4 — Placement Automation | Complete, OCR fallback included (see note below) |
 | M5 — Career Intelligence & Outreach | Complete |
 | M6 — Hardening & Release | Complete, installer included (see note below) |
 
@@ -121,8 +121,8 @@ execution is an independent concern from the splice engine itself") is also
 no longer deferred: `placeinator/latex/compile.py` shells out to a bundled
 [Tectonic](https://github.com/tectonic-typesetting/tectonic) binary rather
 than requiring a system MiKTeX/TeX Live install (same "detect an external
-tool, degrade honestly" shape as the OCR/Tesseract precedent below, but
-self-downloading instead of pushing a multi-GB manual install onto the
+tool, degrade honestly" shape the OCR precedent below already established,
+but self-downloading instead of pushing a multi-GB manual install onto the
 user). Downloaded lazily into `Settings.bin_dir` on first real use, not
 bundled as a packaging resource. `POST /api/latex/tailor/pdf` verified end
 to end for real (not mocked): a cold machine's first compile pays
@@ -150,13 +150,27 @@ the sidecar as its child process, then `Stop-Process -Force`'d the parent
 (simulating a crash) -- the sidecar died with it. A clean `WM_CLOSE` close
 was re-tested too, to confirm no regression there.
 
+OCR for scanned placement attachments (deferred at M4) is also no longer
+deferred, but deliberately narrow: `placeinator/placement/ocr.py` uses
+[RapidOCR](https://github.com/RapidAI/RapidOCR) (pure ONNX Runtime, ADR
+0005 -- PyTorch must never enter the dependency tree) rather than a
+Tesseract subprocess, since its models ship inside the pip wheel itself
+(~12 MB) with no separate binary or runtime download to detect or bundle.
+Text-only, never structured-row reconstruction -- a scanned table's
+skew/merged-cells/spacing is far less reliable to recover than
+pdfplumber's real table extraction already gives a digital PDF, and this
+module's own stakes ("a false positive here tells someone they were
+shortlisted when they were not") make guessing at row/column structure the
+wrong tradeoff. Every OCR'd attachment routes straight to the review
+queue via a fuzzy text-mention check
+(`placeinator.placement.candidates.mentions_candidate_in_text`), never
+auto-accepted regardless of match strength. Verified for real against the
+actual FastAPI endpoint, not mocked -- real ONNX inference on a synthetic
+scanned PDF, both the match and no-match paths.
+
 **Deliberately deferred**, each flagged at the time it was skipped rather than
 silently dropped:
 
-- **OCR for scanned placement attachments** (M4) — Tesseract isn't installed
-  on the dev machine, the same class of external system dependency as the
-  Rust/MSVC and Google Cloud OAuth setups; `OcrUnavailableError` degrades
-  honestly instead of crashing or guessing.
 - **Skill taxonomy at 89 of ~600 originally-scoped entries** (M1) — tracked
   openly as the project's clearest known gap; expanding it is a deliberate
   later decision, not an oversight, since the whole matching pipeline is the

@@ -38,10 +38,10 @@ class EmptyPlacementDocumentError(ValueError):
 
 
 class OcrUnavailableError(ValueError):
-    """A scanned/image attachment was detected, but OCR (Tesseract) isn't
-    available in this environment. Deliberately deferred -- see
-    placeinator/placement/__init__.py -- rather than silently skipped or
-    crashing the sync."""
+    """The OCR engine (placeinator.placement.ocr, RapidOCR) couldn't be
+    initialized or run in this environment. Caught, not fatal, wherever OCR
+    is attempted -- placeinator.placement.service's OCR fallback treats it
+    the same as "OCR found nothing", not a reason to fail the whole sync."""
 
 
 def parse_placement_sheet_bytes(

@@ -11,7 +11,11 @@ behavior, not just the arithmetic.
 from __future__ import annotations
 
 from placeinator.db.models import Profile
-from placeinator.placement.candidates import AUTO_ACCEPT_CONFIDENCE, identify_candidate
+from placeinator.placement.candidates import (
+    AUTO_ACCEPT_CONFIDENCE,
+    identify_candidate,
+    mentions_candidate_in_text,
+)
 
 
 def _profile(**overrides) -> Profile:
@@ -70,3 +74,37 @@ def test_student_id_match_alone_needs_review():
 
 def test_no_recognizable_signal_is_not_a_match():
     assert identify_candidate({}, _profile()) is None
+
+
+def test_mentions_candidate_in_text_finds_a_clean_name():
+    text = "Placement Shortlist\nJane Doe - jane.doe@college.edu - SHORTLISTED"
+    assert mentions_candidate_in_text(text, _profile()) is True
+
+
+def test_mentions_candidate_in_text_tolerates_real_ocr_noise():
+    """Pinned against actual RapidOCR output observed on a synthetic scanned
+    PDF during development (a stray space in the email, a period instead of
+    a colon) -- the name's fuzzy match is what carries this, not the email's
+    exact-substring check, which the same noise breaks."""
+    text = "PlacementShortlist\nJane Doe-jane @college.edu-SHORTLISTED\nCompany.Acme Corp"
+    assert mentions_candidate_in_text(text, _profile()) is True
+
+
+def test_mentions_candidate_in_text_rejects_an_unrelated_document():
+    text = "Placement Shortlist\nJohn Smith - john.smith@college.edu - SHORTLISTED"
+    assert mentions_candidate_in_text(text, _profile()) is False
+
+
+def test_mentions_candidate_in_text_matches_on_email_alone():
+    text = "contact jane.doe@college.edu for details, ref XJ991"
+    assert mentions_candidate_in_text(text, _profile()) is True
+
+
+def test_mentions_candidate_in_text_matches_on_student_id_alone():
+    text = "roll number CS2024001 has been shortlisted"
+    assert mentions_candidate_in_text(text, _profile()) is True
+
+
+def test_mentions_candidate_in_text_matches_a_name_alias():
+    text = "J. Doe has been shortlisted for the next round"
+    assert mentions_candidate_in_text(text, _profile()) is True

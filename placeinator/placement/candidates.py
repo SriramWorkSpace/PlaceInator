@@ -48,6 +48,10 @@ MINIMUM_CONFIDENCE = 0.25
 # here, matching spec's "ambiguous matches" framing for anything less.
 AUTO_ACCEPT_CONFIDENCE = 0.7
 
+# mentions_candidate_in_text's own, more forgiving floor (see its docstring
+# for why it's a separate constant from _NAME_SIMILARITY_FLOOR above).
+_TEXT_MENTION_SIMILARITY_FLOOR = 0.85
+
 
 @dataclass(frozen=True)
 class CandidateMatch:
@@ -101,3 +105,31 @@ def identify_candidate(row: dict[CanonicalField, str], profile: Profile) -> Cand
     if confidence < MINIMUM_CONFIDENCE:
         return None
     return CandidateMatch(confidence=confidence, matched_on=tuple(matched_on))
+
+
+def mentions_candidate_in_text(text: str, profile: Profile) -> bool:
+    """Loosely: does this blob of unstructured text (an OCR'd scanned page,
+    see placeinator.placement.ocr) plausibly mention the candidate at all?
+    ``fuzz.partial_ratio``, not ``identify_candidate``'s ``fuzz.ratio`` --
+    this checks for the candidate's name/email/student ID appearing
+    *somewhere* in a whole page of text, not a cell-to-cell comparison, so
+    it needs substring-tolerant matching, not whole-string similarity.
+
+    Deliberately binary, not confidence-scored: every caller of this is
+    already committed to a review-queue-only outcome (OCR text is far less
+    reliable evidence than a real structured field match), so there's
+    nothing for a finer-grained score to gate here.
+    """
+    haystack = text.lower()
+
+    if profile.email and profile.email.strip().lower() in haystack:
+        return True
+    if profile.student_id and profile.student_id.strip().lower() in haystack:
+        return True
+
+    candidate_names = [profile.full_name, *profile.name_aliases]
+    return any(
+        fuzz.partial_ratio(_normalize_name(name), haystack) / 100 >= _TEXT_MENTION_SIMILARITY_FLOOR
+        for name in candidate_names
+        if name
+    )

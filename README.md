@@ -83,11 +83,13 @@ logs everything else to stderr, so that channel never carries anything but the h
 | Python | 3.12+ (developed on 3.13) | sidecar |
 | Node.js | 22+ (`.nvmrc` pins 22; Node 20 is end-of-life) | frontend |
 | Rust + MSVC build tools | stable | Tauri shell |
-| MiKTeX or TeX Live | any | optional PDF compile only |
-| Tesseract OCR | any | optional scanned-document support only |
 
-The last three are optional in the strict sense that the app must detect their absence
-and degrade with an explanation rather than erroring.
+PDF compile and scanned-document OCR need no separate install: PDF compile downloads
+a self-contained [Tectonic](https://github.com/tectonic-typesetting/tectonic) binary on
+first use (`placeinator/latex/compile.py`), and OCR uses
+[RapidOCR](https://github.com/RapidAI/RapidOCR), a pure ONNX Runtime pipeline whose
+models ship inside the `rapidocr-onnxruntime` pip package itself
+(`placeinator/placement/ocr.py`). Neither requires MiKTeX/TeX Live or Tesseract.
 
 ## Setup
 

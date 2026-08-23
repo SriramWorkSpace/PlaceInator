@@ -33,6 +33,7 @@ import openpyxl
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from PIL import Image, ImageDraw
 
 from placeinator.app import create_app
 from placeinator.db.migrate import upgrade_to_head
@@ -49,6 +50,20 @@ def _xlsx_bytes(rows: list[list[object]]) -> bytes:
         sheet.append(row)
     buf = io.BytesIO()
     workbook.save(buf)
+    return buf.getvalue()
+
+
+def _scanned_pdf_bytes(lines: list[str]) -> bytes:
+    """An image-only PDF (no text layer) -- exactly what a scanned document
+    is. Same builder as tests/unit/test_placement_ocr.py, duplicated rather
+    than imported, matching this file's own precedent for _xlsx_bytes
+    (also duplicated from tests/unit/test_placement_parsing.py)."""
+    image = Image.new("RGB", (800, 60 + 40 * len(lines)), color="white")
+    draw = ImageDraw.Draw(image)
+    for i, line in enumerate(lines):
+        draw.text((20, 20 + 40 * i), line, fill="black")
+    buf = io.BytesIO()
+    image.save(buf, "PDF")
     return buf.getvalue()
 
 
@@ -233,6 +248,75 @@ async def test_a_strong_email_and_name_match_from_an_attachment_auto_accepts(
     assert review_queue.json() == []  # auto-accepted, never entered the queue
 
     assert len(_mock_calendar) == 1  # the calendar call actually happened
+
+
+async def test_a_scanned_attachment_mentioning_the_candidate_lands_in_review(
+    client, _connected, _mock_calendar, monkeypatch
+):
+    """OCR (placeinator.placement.ocr) is the fallback for a PDF attachment
+    with no extractable table -- real ONNX inference through the real
+    RapidOCR engine, not mocked, same as this file's other real-embedding
+    tests. Deliberately never auto-accepted, whatever the match strength --
+    see placeinator.placement.service's OCR branch."""
+    await _onboard(client)
+
+    attachment_bytes = _scanned_pdf_bytes(
+        ["Placement Shortlist", "Jane Doe - SHORTLISTED", "Company: Acme Corp"]
+    )
+    message = FetchedMessage(
+        message_id="msg-scan-1",
+        subject="Shortlist results (scanned)",
+        sender="hr@acme.com",
+        body_text="See attached scan.",
+        attachments=(
+            FetchedAttachment(
+                filename="shortlist_scan.pdf", mime_type="application/pdf", data=attachment_bytes
+            ),
+        ),
+    )
+    monkeypatch.setattr("placeinator.placement.gmail.fetch_new_messages", _mock_fetch([message]))
+
+    sync_response = await client.post("/api/placement/sync")
+    assert sync_response.status_code == 204, sync_response.text
+
+    queue = (await client.get("/api/placement/review-queue")).json()
+    assert len(queue) == 1
+    assert queue[0]["needs_review"] is True
+    assert queue[0]["matched_on"] == ["ocr_text"]
+    assert len(_mock_calendar) == 0  # never auto-accepted, so no auto-created event either
+
+
+async def test_a_scanned_attachment_not_mentioning_the_candidate_falls_back_to_inbox_signal(
+    client, _connected, monkeypatch
+):
+    """When OCR doesn't turn up the candidate either, this falls all the way
+    through to the pre-existing "the message landed in this connected
+    mailbox" signal (service.py's own else branch, unchanged by OCR) --
+    matched_on is "inbox", not "ocr_text", proving OCR correctly declined
+    the match rather than silently swallowing the message."""
+    await _onboard(client)
+
+    attachment_bytes = _scanned_pdf_bytes(["Placement Shortlist", "John Smith - SHORTLISTED"])
+    message = FetchedMessage(
+        message_id="msg-scan-2",
+        subject="Shortlist results (scanned)",
+        sender="hr@acme.com",
+        body_text="See attached scan.",
+        attachments=(
+            FetchedAttachment(
+                filename="shortlist_scan.pdf", mime_type="application/pdf", data=attachment_bytes
+            ),
+        ),
+    )
+    monkeypatch.setattr("placeinator.placement.gmail.fetch_new_messages", _mock_fetch([message]))
+
+    sync_response = await client.post("/api/placement/sync")
+    assert sync_response.status_code == 204, sync_response.text
+
+    timeline = (await client.get("/api/placement/timeline")).json()
+    records = [r for group in timeline.values() for r in group]
+    assert len(records) == 1
+    assert records[0]["matched_on"] == ["inbox"]
 
 
 async def test_a_weak_match_lands_in_the_review_queue_and_confirm_creates_the_event(

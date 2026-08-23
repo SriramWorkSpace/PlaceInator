@@ -9,6 +9,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **OCR fallback for scanned placement-sheet attachments** (deferred at
+  M4). Scoped deliberately narrow after weighing the tradeoff explicitly:
+  text-only extraction, always routed to the review queue, never
+  auto-accepted -- reconstructing real table rows/columns from noisy OCR
+  word positions is meaningfully less reliable than pdfplumber's real
+  table extraction, and this module's own stakes ("a false positive here
+  tells someone they were shortlisted when they were not") make guessing
+  at structure the wrong call.
+  - New `placeinator/placement/ocr.py` uses
+    [RapidOCR](https://github.com/RapidAI/RapidOCR) rather than a
+    Tesseract subprocess -- pure ONNX Runtime (ADR 0005: PyTorch must
+    never enter the dependency tree), and its models ship inside the
+    `rapidocr-onnxruntime` wheel itself (~12 MB), so there's no separate
+    binary to detect, bundle, or download at runtime, unlike the embedding
+    model or the bundled Tectonic PDF engine.
+  - New `placeinator.placement.candidates.mentions_candidate_in_text`:
+    fuzzy substring-style matching (`rapidfuzz.fuzz.partial_ratio`) for
+    "does the candidate appear anywhere in this blob of OCR'd text",
+    distinct from `identify_candidate`'s cell-to-cell comparison.
+  - `service.py`'s message-processing flow gets a new branch: a PDF
+    attachment with no extractable table falls back to OCR; if the result
+    plausibly mentions the candidate, a record is created pinned at
+    `MINIMUM_CONFIDENCE` (always below auto-accept) with
+    `matched_on: ["ocr_text"]`; if it doesn't, the message falls through
+    to the pre-existing "landed in this connected mailbox" inbox signal,
+    unchanged.
+  - Verified for real, not mocked: real RapidOCR inference against a
+    synthetic scanned PDF, through the actual `/api/placement/sync`
+    endpoint, for both the match and no-match paths. Unit tests run in the
+    regular suite (~1.6s total) -- no `model` marker needed, since
+    RapidOCR's bundled models mean no network dependency to avoid.
+
 - **Windows Job Object for crash-safe sidecar cleanup** (deferred at M0).
   `child.kill()` on the shell's `RunEvent::ExitRequested` only ever
   guaranteed the sidecar died on a clean window close -- a hard crash of
