@@ -29,12 +29,20 @@ jobs:
       # scoped to test_scoring.py with continue-on-error, which meant the M1
       # end-to-end acceptance suite and every API-level job test -- 20+ tests,
       # the ones covering the paths a user actually exercises -- never ran in
-      # CI at all. It downloads the ~130 MB embedding model once per run
+      # CI at all. It downloads the ~64 MB embedding model once per run
       # (fastembed's loader is lru_cached, so it is one download for the whole
       # session, not one per test).
-      - run: python -m pytest tests/ -m model -q
+      #
+      # "and not tex" excludes the Tectonic-backed PDF compile tests even
+      # though some are also model-marked -- Tectonic's own first-ever-compile
+      # format bootstrap can take several minutes on a slow connection (see
+      # placeinator/latex/compile.py), which is a real CI reliability cost the
+      # `model` gate's one ~64 MB download doesn't have. Manual-only, same
+      # spirit as `live`, not a lesser check.
+      - run: python -m pytest tests/ -m "model and not tex" -q
       # `live` tests stay opt-in: they hit real third-party job boards, so a
-      # site being down is not this repo's build failing.
+      # site being down is not this repo's build failing. `tex` tests stay
+      # opt-in for the reason above.
 
   frontend:
     runs-on: ubuntu-latest

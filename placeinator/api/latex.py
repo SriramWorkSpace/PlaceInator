@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from placeinator.db.models import Job, Resume, TailoredResume
 from placeinator.db.session import get_session
+from placeinator.latex.compile import PdfCompileError, compile_tex_to_pdf
 from placeinator.latex.parsing import LatexParseError
 from placeinator.latex.tailoring import tailor_resume
 
@@ -75,3 +77,33 @@ def tailor(data: TailorIn, session: Session = Depends(get_session)) -> TailorOut
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return _to_out(tailored)
+
+
+@router.post("/tailor/pdf")
+def tailor_pdf(data: TailorIn, session: Session = Depends(get_session)) -> Response:
+    """Same tailoring as POST /tailor, compiled to PDF (spec section 5's PDF
+    export, M3's deferred piece -- see docs/architecture.md). Recomputes the
+    tailoring rather than reading a stored TailoredResume, matching
+    tailor_resume's own "cheap enough to redo every call" design (its module
+    docstring) -- one request in, one PDF out, no separate staleness gate."""
+    resume = session.get(Resume, data.resume_id)
+    if resume is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no resume with id {data.resume_id}")
+
+    job = session.get(Job, data.job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no job with id {data.job_id}")
+
+    try:
+        tailored = tailor_resume(
+            session, resume, job, excluded_bullet_ids=frozenset(data.excluded_bullet_ids)
+        )
+    except LatexParseError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+    try:
+        pdf_bytes = compile_tex_to_pdf(tailored.tex)
+    except PdfCompileError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+
+    return Response(content=pdf_bytes, media_type="application/pdf")

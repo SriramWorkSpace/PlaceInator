@@ -3,8 +3,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { Button, ErrorText, Field, Select, TextArea } from "@/components/Form";
 import { EmptyState, Page } from "@/components/Page";
-import { listJobs, listResumes, tailorResume } from "@/lib/api";
-import type { BulletOut, SectionOut, TailorOut } from "@/lib/types";
+import { listJobs, listResumes, tailorResume, tailorResumeAsPdf } from "@/lib/api";
+import type { BulletOut, SectionOut, TailorIn, TailorOut } from "@/lib/types";
 import { useTheme } from "@/lib/theme";
 
 // @monaco-editor/react pulls in real weight for one route -- lazy-loaded the
@@ -111,11 +111,16 @@ export function Tailor() {
         </div>
       )}
 
-      {tailor.data && (
+      {tailor.data && effectiveResumeId !== null && jobId !== null && (
         <TailorResult
           result={tailor.data}
           jobLabel={selectedJob ? `${selectedJob.company} — ${selectedJob.designation}` : ""}
           onToggleBullet={toggleBullet}
+          tailorInput={{
+            resume_id: effectiveResumeId,
+            job_id: jobId,
+            excluded_bullet_ids: [...excludedBulletIds],
+          }}
         />
       )}
     </Page>
@@ -126,10 +131,12 @@ function TailorResult({
   result,
   jobLabel,
   onToggleBullet,
+  tailorInput,
 }: {
   result: TailorOut;
   jobLabel: string;
   onToggleBullet: (bulletId: number) => void;
+  tailorInput: TailorIn;
 }) {
   const { theme } = useTheme();
 
@@ -142,6 +149,18 @@ function TailorResult({
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const downloadPdf = useMutation({
+    mutationFn: () => tailorResumeAsPdf(tailorInput),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tailored_resume.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
 
   return (
     <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
@@ -163,10 +182,28 @@ function TailorResult({
           style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         >
           <span className="text-sm font-medium">Tailored_Resume.tex</span>
-          <Button type="button" variant="secondary" onClick={download}>
-            Download .tex
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => downloadPdf.mutate()}
+              disabled={downloadPdf.isPending}
+              title="First PDF on a fresh install can take a few minutes while the PDF engine sets itself up; every one after that is fast."
+            >
+              {downloadPdf.isPending ? "Compiling…" : "Download PDF"}
+            </Button>
+            <Button type="button" variant="secondary" onClick={download}>
+              Download .tex
+            </Button>
+          </div>
         </div>
+        {downloadPdf.isError && (
+          <div className="border-b px-4 py-2.5" style={{ borderColor: "var(--border)" }}>
+            <ErrorText onDismiss={() => downloadPdf.reset()}>
+              {(downloadPdf.error as Error).message}
+            </ErrorText>
+          </div>
+        )}
         <Suspense fallback={<TexPreviewFallback text={result.tex} />}>
           <Editor
             height="600px"

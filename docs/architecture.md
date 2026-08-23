@@ -97,7 +97,7 @@ Root modules: `app.py` (application factory), `main.py` (entry point and handsha
 | M0 — Foundation | Sidecar + frontend done; desktop shell works in dev mode; PyInstaller packaging not wired |
 | M1 — Profile, Resume, Matching | Complete |
 | M2 — Job Intelligence | Complete |
-| M3 — LaTeX Tailoring | Complete, except PDF compile |
+| M3 — LaTeX Tailoring | Complete, PDF compile included (see note below) |
 | M4 — Placement Automation | Complete, except OCR for scanned images |
 | M5 — Career Intelligence & Outreach | Complete |
 | M6 — Hardening & Release | Complete, installer included (see note below) |
@@ -116,6 +116,24 @@ this dev machine, not a genuinely clean separate VM or physical machine** --
 that's still open before shipping to someone else's computer with any
 confidence.
 
+PDF compile (deferred at M3: "TeX-distribution detection and subprocess
+execution is an independent concern from the splice engine itself") is also
+no longer deferred: `placeinator/latex/compile.py` shells out to a bundled
+[Tectonic](https://github.com/tectonic-typesetting/tectonic) binary rather
+than requiring a system MiKTeX/TeX Live install (same "detect an external
+tool, degrade honestly" shape as the OCR/Tesseract precedent below, but
+self-downloading instead of pushing a multi-GB manual install onto the
+user). Downloaded lazily into `Settings.bin_dir` on first real use, not
+bundled as a packaging resource. `POST /api/latex/tailor/pdf` verified end
+to end for real (not mocked): a cold machine's first compile pays
+Tectonic's own one-time LaTeX-format-bootstrap cost -- observed ~13 minutes
+on a slow connection, `tests/integration/test_latex_api.py`'s `tex`-marked
+test timed it -- after which every compile is under a second. That test
+stays manual-only (`pytest tests/ -m tex`, deselected by both the local
+default and CI's `model` step, see pyproject.toml), since paying a
+13-minute network-dependent cost on every CI run for one already-proven
+code path isn't worth the reliability risk.
+
 **Deliberately deferred**, each flagged at the time it was skipped rather than
 silently dropped:
 
@@ -124,8 +142,6 @@ silently dropped:
   close, not a hard crash. Reconfirmed against the installed M6 build: a
   clean close (`WM_CLOSE`) kills the sidecar correctly; force-killing the
   parent (simulating a crash) leaves it orphaned, exactly as documented here.
-- **PDF compile** (M3) — TeX-distribution detection and subprocess execution
-  is an independent concern from the splice engine itself.
 - **OCR for scanned placement attachments** (M4) — Tesseract isn't installed
   on the dev machine, the same class of external system dependency as the
   Rust/MSVC and Google Cloud OAuth setups; `OcrUnavailableError` degrades

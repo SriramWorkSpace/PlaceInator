@@ -40,8 +40,15 @@ class Settings(BaseSettings):
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
 
+    @property
+    def bin_dir(self) -> Path:
+        """Third-party executables downloaded at runtime (e.g. Tectonic,
+        see placeinator.latex.compile) -- never bundled in the repo or the
+        installer, same reasoning as models_dir for the embedding model."""
+        return self.data_dir / "bin"
+
     def ensure_dirs(self) -> None:
-        for path in (self.data_dir, self.models_dir, self.cache_dir):
+        for path in (self.data_dir, self.models_dir, self.cache_dir, self.bin_dir):
             path.mkdir(parents=True, exist_ok=True)
 
 

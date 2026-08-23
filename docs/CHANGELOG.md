@@ -9,6 +9,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **PDF export for tailored resumes** (spec §5, deferred at M3: "TeX-distribution
+  detection and subprocess execution is an independent concern from the splice
+  engine itself"). New `placeinator/latex/compile.py` shells out to a bundled
+  [Tectonic](https://github.com/tectonic-typesetting/tectonic) binary instead of
+  requiring a system MiKTeX/TeX Live install -- a single self-contained engine
+  downloaded lazily into `Settings.bin_dir` on first real use (never committed
+  to git or bundled as a packaging resource, same pattern as the embedding
+  model), mirroring the OCR/Tesseract precedent's "detect an external tool,
+  degrade honestly" shape without pushing a multi-GB manual install onto the
+  user first.
+  - New `POST /api/latex/tailor/pdf`, same body as `/tailor`, returns raw PDF
+    bytes. Recomputes the tailoring itself rather than reading a stored
+    artifact, matching `tailor_resume`'s own "cheap enough to redo every call"
+    design.
+  - `Tailor.tsx` gets a "Download PDF" button next to "Download .tex".
+  - Deliberately **no app-startup warm-up** for Tectonic, unlike the embedding
+    model: warming it up unconditionally at every app startup would mean six
+    unrelated integration test files (jobs, placement, M1/M5 flow tests --
+    anything that builds the real app via its lifespan) each pay a real
+    network cost for a capability they never touch. Purely lazy instead,
+    downloaded on the first real `/tailor/pdf` call.
+  - Verified for real, not mocked: a fresh machine's first-ever compile also
+    bootstraps Tectonic's own LaTeX format cache (dozens of individual
+    package files) -- observed ~13 minutes end to end on a slow connection
+    (`tests/integration/test_latex_api.py`'s new `tex`-marked test measured
+    it), after which every compile is under a second. That test is
+    manual-only (`pytest tests/ -m tex`) -- excluded from both the local
+    default run and CI's `model` step (`.github/workflows/ci.yml`), since a
+    13-minute network-dependent cost isn't worth paying on every CI run for
+    one already-proven code path.
+
 - **PyInstaller packaging + NSIS installer** (the M0/ADR 0001 packaging risk,
   proven rather than assumed). `packaging/placeinator_backend.spec` freezes
   the sidecar as a PyInstaller onedir bundle with explicit `collect_all()`

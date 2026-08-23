@@ -80,10 +80,12 @@ testpaths = ["tests"]
 markers = [
     "live: hits real external services (opt-in, deselected by default)",
     "model: downloads/runs the real embedding model, ~35s first run (opt-in, deselected by default)",
+    "tex: compiles a real PDF via the bundled Tectonic engine -- the first-ever run on a machine bootstraps Tectonic's LaTeX format cache, observed taking several minutes on a slow connection (opt-in, deselected by default, manual-only -- not run in CI even alongside `model`, see ci.yml)",
 ]
 # `model` is deselected by default to keep the local edit loop fast, but CI
-# runs it as a required second step -- it is opt-in, not optional.
-addopts = "-m 'not live and not model'"
+# runs it as a required second step -- it is opt-in, not optional. `tex` stays
+# manual-only everywhere (see the marker's own description above).
+addopts = "-m 'not live and not model and not tex'"
 # pytest-asyncio's default is already strict, but declaring it means a version
 # bump can't silently change how the async integration tests are collected.
 asyncio_mode = "strict"

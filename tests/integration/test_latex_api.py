@@ -185,3 +185,21 @@ async def test_malformed_latex_source_422s_instead_of_500(client):
         "/api/latex/tailor", json={"resume_id": resume_id, "job_id": job_id}
     )
     assert response.status_code == 422
+
+
+@pytest.mark.tex
+async def test_tailor_pdf_endpoint_returns_a_real_pdf(client):
+    """Manual-only (see pyproject.toml's `tex` marker): compiles through the
+    real bundled Tectonic engine, not a mock. The first run on a machine
+    also pays Tectonic's own one-time format-bootstrap cost (several minutes
+    on a slow connection, see placeinator/latex/compile.py) -- run this
+    directly (`pytest tests/ -m tex -v`) rather than as part of the normal
+    suite."""
+    resume_id, job_id = await _onboard_and_seed(client)
+
+    response = await client.post(
+        "/api/latex/tailor/pdf", json={"resume_id": resume_id, "job_id": job_id}
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")

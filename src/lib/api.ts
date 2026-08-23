@@ -47,7 +47,7 @@ interface Connection {
   token: string;
 }
 
-function connection(): Connection {
+export function connection(): Connection {
   const injected = window.__PLACEINATOR__;
   if (injected) {
     return {
@@ -252,6 +252,35 @@ export const getModelStatus = () => apiFetch<ModelStatusOut>("/api/matching/mode
  * toggling `excluded_bullet_ids` and calling again is the normal flow. */
 export const tailorResume = (data: TailorIn) =>
   apiFetch<TailorOut>("/api/latex/tailor", { method: "POST", body: JSON.stringify(data) });
+
+/** Same tailoring as tailorResume, compiled to PDF via the bundled Tectonic
+ * engine (M3's deferred PDF export). Not routed through apiFetch: a success
+ * response is raw PDF bytes, not JSON, so this handles the two content
+ * types itself rather than forcing apiFetch's generic JSON parsing to cover
+ * a case it isn't shaped for. The first-ever call on a machine can take
+ * minutes (Tectonic's one-time format bootstrap, see
+ * placeinator/latex/compile.py) unless the background warm-up already beat
+ * it to it. */
+export async function tailorResumeAsPdf(data: TailorIn): Promise<Blob> {
+  const { baseUrl, token } = connection();
+  const response = await fetch(`${baseUrl}/api/latex/tailor/pdf`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    let detail = response.statusText;
+    try {
+      detail = ((await response.json()) as { detail?: string }).detail ?? detail;
+    } catch {
+      // non-JSON error body; keep the status text
+    }
+    throw new Error(`${response.status}: ${detail}`);
+  }
+
+  return response.blob();
+}
 
 // -- Placement automation (spec §7) -----------------------------------------
 

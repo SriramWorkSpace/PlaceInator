@@ -36,7 +36,15 @@ def _warm_up_embedding_model() -> None:
     _model() isn't cached on failure (lru_cache never caches an exception),
     so the same attempt happens again and surfaces properly as a 503 via the
     ModelDownloadError handler below, the moment a real request actually
-    needs it."""
+    needs it.
+
+    The PDF engine (placeinator.latex.compile) deliberately does NOT get the
+    same startup warm-up: unlike the embedding model, which nearly every
+    feature touches, Tectonic is needed only by the PDF-export endpoint, and
+    warming it up unconditionally at every app startup would mean every
+    integration test that spins up the real app -- not just the LaTeX ones --
+    pays a real network cost for a capability it never uses. It stays purely
+    lazy, downloaded on the first actual /api/latex/tailor/pdf call."""
     try:
         warm_up_model()
     except ModelDownloadError:
