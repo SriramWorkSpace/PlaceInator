@@ -100,19 +100,30 @@ Root modules: `app.py` (application factory), `main.py` (entry point and handsha
 | M3 — LaTeX Tailoring | Complete, except PDF compile |
 | M4 — Placement Automation | Complete, except OCR for scanned images |
 | M5 — Career Intelligence & Outreach | Complete |
-| M6 — Hardening & Release | Complete, except the PyInstaller/NSIS installer |
+| M6 — Hardening & Release | Complete, installer included (see note below) |
+
+PyInstaller packaging (deferred at M0, ADR 0001/0005's "likeliest packaging
+problem") is no longer deferred: `packaging/placeinator_backend.spec` freezes
+the sidecar onedir, proven standalone first (spawn, handshake, `/health`,
+real ONNX embedding + matching, SQLite, clean shutdown -- both in place and
+copied outside the repo with a sanitized `PATH` and no dev venv reachable),
+then wired into `tauri.conf.json`'s `bundle.resources` (not `externalBin` --
+onedir's `_internal/` directory has to sit next to the exe, which doesn't
+fit `externalBin`'s single-portable-file convention) and built into a real
+NSIS installer, installed to a directory outside the repo, and re-verified
+end to end against that installed copy. **Remaining gap: only tested on
+this dev machine, not a genuinely clean separate VM or physical machine** --
+that's still open before shipping to someone else's computer with any
+confidence.
 
 **Deliberately deferred**, each flagged at the time it was skipped rather than
 silently dropped:
 
-- **PyInstaller bundling and the NSIS installer** (deferred at M0, still the
-  only open M6 item) — onnxruntime's native libraries are flagged in two ADRs
-  (0001, 0005) as the likely packaging problem; wiring `bundle.externalBin`
-  is separate, riskier work, kept as its own follow-up rather than bundled
-  into the same pass as the rest of M6's hardening.
 - **A Windows Job Object** (M0) — today's `child.kill()` on the shell's
   `ExitRequested` event only guarantees the sidecar dies on a clean window
-  close, not a hard crash.
+  close, not a hard crash. Reconfirmed against the installed M6 build: a
+  clean close (`WM_CLOSE`) kills the sidecar correctly; force-killing the
+  parent (simulating a crash) leaves it orphaned, exactly as documented here.
 - **PDF compile** (M3) — TeX-distribution detection and subprocess execution
   is an independent concern from the splice engine itself.
 - **OCR for scanned placement attachments** (M4) — Tesseract isn't installed

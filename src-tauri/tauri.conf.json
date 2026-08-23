@@ -26,6 +26,9 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "resources": {
+      "../packaging/dist/PlaceInatorBackend": "backend"
     }
   }
 }

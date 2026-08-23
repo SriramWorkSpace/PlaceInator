@@ -7,6 +7,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **PyInstaller packaging + NSIS installer** (the M0/ADR 0001 packaging risk,
+  proven rather than assumed). `packaging/placeinator_backend.spec` freezes
+  the sidecar as a PyInstaller onedir bundle with explicit `collect_all()`
+  for fastembed, onnxruntime, huggingface_hub, tokenizers, alembic,
+  sqlalchemy, and the other packages PyInstaller's static analysis can't
+  see through on its own, plus explicit `datas` for `alembic.ini`,
+  `migrations/`, and `skills/*.json` (none ever `import`ed, so never
+  auto-discovered). Verified standalone first -- real ONNX embedding and
+  matching, from a copy outside the repo with `PATH` stripped and no
+  dev venv reachable -- before touching Tauri at all.
+  - `tauri.conf.json`'s `bundle.resources` ships the whole onedir folder
+    (not `externalBin`, which assumes a single portable file and can't fit
+    onedir's `_internal/`-must-sit-next-to-the-exe requirement).
+    `src-tauri/src/lib.rs`'s `spawn_sidecar` branches on
+    `cfg!(debug_assertions)`: dev mode is unchanged, release resolves the
+    bundled exe via `app.path().resource_dir()` and spawns it with
+    `CREATE_NO_WINDOW` (otherwise a console window flashes on every launch,
+    since the frozen backend is console-subsystem and the release Tauri
+    binary is windowed-subsystem with nothing for it to attach to).
+  - Built a real `PlaceInator_0.1.0_x64-setup.exe`, silently installed it
+    outside the repo, and re-ran the full functional checklist against the
+    installed copy: handshake, `/health`, SQLite, ONNX Runtime + model load,
+    real resume embedding, real job matching, and the placement router's
+    Gmail/Calendar dependencies all importing cleanly. The installed app's
+    own WebView rendered real persisted profile data through the injected
+    handshake token -- not just a scripted HTTP check.
+  - Reconfirmed the already-known Windows Job Object gap (see Milestone
+    status) against the installed build: closing the window cleanly kills
+    the sidecar; force-killing the parent (simulating a crash) still
+    orphans it, unchanged from the dev-mode finding.
+  - **Not yet done**: tested only on this dev machine. A genuinely clean VM
+    or separate physical Windows machine hasn't run the installer yet.
+
 ### Documentation
 
 - **Consolidated docs from 6 files down to 4.** `specification.md`,

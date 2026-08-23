@@ -10,6 +10,10 @@ venv/
 build/
 dist/
 *.spec
+# ...except the hand-written, reproducible PyInstaller spec (packaging/) --
+# this one is a real project artifact, not a throwaway PyInstaller-generated
+# default, and deliberately checked in.
+!packaging/*.spec
 
 # ONNX models are downloaded at first run into the per-user data directory
 # (see Settings.models_dir) -- deliberately NOT into the repo, so a packaged

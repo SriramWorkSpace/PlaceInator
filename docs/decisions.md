@@ -119,6 +119,34 @@ build time via the `cc` crate, a separate bootstrapping need from rustc's own fi
 link step, and hit the exact same "tool not found" problem for the same underlying
 reason.
 
+### Verified in practice (2026-08-23): the packaging risk this ADR flagged
+
+The onnxruntime-bundling risk above (line 75) is resolved, proven in two stages
+rather than assumed from a green build:
+
+1. **Standalone spike** (`packaging/placeinator_backend.spec`, onedir): explicit
+   `collect_all()` for every package doing something PyInstaller's static
+   analysis can't see through (native libs, `importlib.metadata`-resolved
+   plugins, filesystem-scanned Alembic migrations), not the default hook set.
+   Copied to a directory outside the repo with `PATH` stripped to
+   `C:\Windows\System32;C:\Windows` and no `PYTHONPATH`/`PYTHONHOME`/
+   `VIRTUAL_ENV` -- real ONNX embedding + matching still passed identically.
+2. **Tauri integration**: shipped as `bundle.resources` (`"backend"`), not
+   `externalBin` -- onedir's `_internal/` directory has to sit next to the exe,
+   which doesn't fit `externalBin`'s single-portable-file sidecar convention.
+   `spawn_sidecar` (`src-tauri/src/lib.rs`) branches on `cfg!(debug_assertions)`:
+   dev unchanged, release resolves the bundled exe via
+   `app.path().resource_dir()` and spawns it with `CREATE_NO_WINDOW` (the
+   frozen backend is a console-subsystem exe; without the flag Windows pops a
+   visible console on every launch of a windowed-subsystem release app). Built
+   a real NSIS installer, silently installed it to `C:\PlaceInatorInstalled`
+   (outside the repo), and re-ran the full functional checklist against that
+   installed copy -- including the actual WebView rendering real persisted
+   profile data through the injected handshake token, not just a curl script.
+
+**Still open**: only verified on this dev machine. No genuinely clean VM or
+separate physical machine has run the installer yet.
+
 ---
 
 ## ADR 0002 — Deterministic engine, no LLM generation
@@ -400,7 +428,9 @@ All wheels. No source builds. **No PyTorch anywhere in the tree.**
   and `embedding_dim` alongside the bytes, making stale rows detectable and
   re-embeddable.
 - onnxruntime ships native libraries, which makes it the likeliest PyInstaller
-  packaging problem. Proving the packaged build is scheduled for M0/M1, not M6.
+  packaging problem. Proven working (2026-08-23) -- see ADR 0001's "Verified
+  in practice" note for the actual packaging + Tauri integration + installed
+  functional test.
 
 ---
 

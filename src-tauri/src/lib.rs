@@ -4,10 +4,16 @@
 //!
 //! The protocol is fully specified in `placeinator/main.py` and
 //! `docs/decisions.md` (ADR 0001) -- this only implements the Rust side of
-//! it. Dev-mode only: spawns `.venv/Scripts/python.exe -m placeinator.main`
-//! directly rather than a bundled binary. `PLACEINATOR_DATA_DIR` is
-//! deliberately left unset here -- only a packaged build should override it
-//! (see `placeinator/settings.py`'s own comment on that field).
+//! it. Two spawn paths, chosen by build mode: a debug build runs
+//! `.venv/Scripts/python.exe -m placeinator.main` directly out of the repo
+//! (unchanged from before packaging existed); a release build runs the
+//! PyInstaller-frozen backend shipped as a bundle resource (see
+//! `spawn_packaged_sidecar` below and `packaging/placeinator_backend.spec`,
+//! proven standalone by the M6 packaging spike). `PLACEINATOR_DATA_DIR` is
+//! deliberately left unset on both paths -- `platformdirs.user_data_dir`
+//! resolves the same per-user AppData location regardless of dev vs.
+//! packaged (see `placeinator/settings.py`'s own comment on that field), so
+//! there is nothing for either path to override.
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -15,8 +21,21 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Mutex};
 use std::time::Duration;
 
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 use serde::Deserialize;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
+
+/// Windows process-creation flag: suppress the console window Windows would
+/// otherwise auto-allocate for a console-subsystem child (the frozen
+/// backend, built `console=True` -- see the spec's own comment on why that
+/// wasn't changed) when its parent -- this release Tauri binary, built
+/// `windows_subsystem = "windows"` in main.rs -- has no console of its own
+/// to attach it to. Piping stdout alone does not suppress this; only the
+/// creation flag does.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 const HANDSHAKE_PREFIX: &str = "PLACEINATOR_READY";
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -32,27 +51,73 @@ struct Handshake {
 struct SidecarProcess(Mutex<Option<Child>>);
 
 fn repo_root() -> PathBuf {
-    // src-tauri/ is always a direct child of the repo root -- true in dev
-    // and, once PyInstaller wiring lands, still true for a packaged build's
-    // own resolution (that phase is deferred; this fn only serves dev mode).
+    // src-tauri/ is always a direct child of the repo root at compile time --
+    // true in dev, but CARGO_MANIFEST_DIR is baked in at build time, so this
+    // would resolve to the *build machine's* checkout on an installed copy.
+    // Only the debug spawn path (spawn_sidecar) ever calls this; the release
+    // path resolves everything through app.path().resource_dir() instead
+    // (spawn_packaged_sidecar), which is install-location-aware.
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("src-tauri has a parent directory")
         .to_path_buf()
 }
 
-fn spawn_sidecar() -> std::io::Result<Child> {
-    let root = repo_root();
-    let python = root.join(".venv").join("Scripts").join("python.exe");
-    Command::new(python)
-        .args(["-m", "placeinator.main"])
-        .current_dir(&root)
+fn spawn_sidecar(app: &tauri::App) -> std::io::Result<Child> {
+    if cfg!(debug_assertions) {
+        let root = repo_root();
+        let python = root.join(".venv").join("Scripts").join("python.exe");
+        Command::new(python)
+            .args(["-m", "placeinator.main"])
+            .current_dir(&root)
+            .stdout(Stdio::piped())
+            // Sidecar logging goes to stderr by design (main.py repoints
+            // every uvicorn handler there) -- inherit it so it lands in the
+            // same console the Tauri process itself logs to.
+            .stderr(Stdio::inherit())
+            .spawn()
+    } else {
+        spawn_packaged_sidecar(app)
+    }
+}
+
+/// Release-mode only: the debug branch above spawns the repo's own venv
+/// Python directly, which does not exist in an installed application.
+/// `tauri.conf.json`'s `bundle.resources` (not `externalBin`) ships the
+/// whole PyInstaller onedir output under the app's resource directory --
+/// `externalBin`'s sidecar convention is built for a single portable file,
+/// but onedir's `_internal/` directory must sit next to the exe for
+/// PyInstaller's own loader to find it (verified during the packaging
+/// spike), so the whole folder travels as one resource tree instead of
+/// being squeezed into that convention.
+#[cfg(windows)]
+fn spawn_packaged_sidecar(app: &tauri::App) -> std::io::Result<Child> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| std::io::Error::other(format!("could not resolve resource_dir: {e}")))?;
+    let backend_dir = resource_dir.join("backend");
+    let exe = backend_dir.join("PlaceInatorBackend.exe");
+
+    Command::new(&exe)
+        .current_dir(&backend_dir)
         .stdout(Stdio::piped())
-        // Sidecar logging goes to stderr by design (main.py repoints every
-        // uvicorn handler there) -- inherit it so it lands in the same
-        // console the Tauri process itself logs to.
-        .stderr(Stdio::inherit())
+        // Stdio::null() rather than inherit(): this release binary is a
+        // windowed-subsystem process (main.rs), so it normally has no
+        // console and thus no valid stderr handle to hand down -- null()
+        // guarantees the child gets a real (if discarding) handle instead
+        // of possibly inheriting an invalid one.
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
         .spawn()
+}
+
+#[cfg(not(windows))]
+fn spawn_packaged_sidecar(_app: &tauri::App) -> std::io::Result<Child> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "packaged sidecar spawning is only implemented for Windows (spec: PlaceInatorBackend.exe)",
+    ))
 }
 
 /// Blocks until the sidecar prints its handshake line, or `timeout` elapses,
@@ -117,7 +182,7 @@ pub fn run() {
                 )?;
             }
 
-            let mut child = spawn_sidecar()
+            let mut child = spawn_sidecar(app)
                 .map_err(|e| format!("failed to spawn the Python sidecar: {e}"))?;
 
             let handshake = match read_handshake(&mut child, HANDSHAKE_TIMEOUT) {
