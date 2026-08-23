@@ -23,3 +23,15 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
+
+# Windows Job Object (src/lib.rs's create_kill_on_close_job): guarantees the
+# sidecar dies even if this process crashes, not just on a clean window
+# close. Already resolved transitively via tauri/wry (see Cargo.lock), so
+# this pins the same version rather than risking a second one.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

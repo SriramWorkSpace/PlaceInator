@@ -1,6 +1,6 @@
 //! Sidecar supervision: spawn the Python sidecar, read its one-line
 //! handshake, inject `window.__PLACEINATOR__` before the frontend's own
-//! scripts run, and kill the sidecar on exit.
+//! scripts run, and guarantee it dies with this process -- cleanly or not.
 //!
 //! The protocol is fully specified in `placeinator/main.py` and
 //! `docs/decisions.md` (ADR 0001) -- this only implements the Rust side of
@@ -14,6 +14,15 @@
 //! resolves the same per-user AppData location regardless of dev vs.
 //! packaged (see `placeinator/settings.py`'s own comment on that field), so
 //! there is nothing for either path to override.
+//!
+//! Two cleanup mechanisms, deliberately both kept (see `create_kill_on_close_job`):
+//! the `RunEvent::ExitRequested` handler's `child.kill()` for a fast, explicit
+//! kill on a clean window close, and a Windows Job Object as the crash-safety
+//! net for every other way this process can end -- the ExitRequested handler
+//! never runs on a crash or a forceful kill, so it alone always left the
+//! sidecar orphaned in exactly those cases (the documented gap this file used
+//! to carry, reconfirmed against the packaged M6 build: `WM_CLOSE` killed the
+//! sidecar, `Stop-Process -Force` on the parent did not).
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -23,6 +32,17 @@ use std::time::Duration;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
+
+#[cfg(windows)]
+use windows::Win32::Foundation::HANDLE;
+#[cfg(windows)]
+use windows::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
 
 use serde::Deserialize;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
@@ -49,6 +69,49 @@ struct Handshake {
 /// Holds the sidecar's `Child` for the app's lifetime, so the exit handler
 /// can kill it. `None` once taken (killed, or never successfully spawned).
 struct SidecarProcess(Mutex<Option<Child>>);
+
+/// Holds the Job Object handle for the app's lifetime -- purely to keep it
+/// open (see `create_kill_on_close_job`'s doc comment for why that's the
+/// entire mechanism). Never read back out; `app.manage()` needs somewhere
+/// to keep it alive, nothing more.
+///
+/// `HANDLE` wraps a raw pointer, so it isn't `Send`/`Sync` by default; this
+/// value is opaque OS-assigned data with no thread affinity, only ever
+/// created once on the setup thread and never mutated afterward, which is
+/// exactly the case these two impls exist for.
+#[cfg(windows)]
+struct SidecarJob(#[allow(dead_code)] HANDLE);
+#[cfg(windows)]
+unsafe impl Send for SidecarJob {}
+#[cfg(windows)]
+unsafe impl Sync for SidecarJob {}
+
+/// Creates a Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`
+/// set. Windows closes every handle a process owns when that process ends,
+/// for *any* reason including a crash or an external `TerminateProcess` --
+/// with this limit set, the moment the job object's last handle closes (i.e.
+/// this app's process ending, however it ends), every process still
+/// assigned to the job is killed by the OS itself. No cooperative shutdown
+/// code in this process has to run for that to happen, which is exactly the
+/// property `RunEvent::ExitRequested`'s handler cannot offer on its own.
+#[cfg(windows)]
+fn create_kill_on_close_job() -> windows::core::Result<HANDLE> {
+    let job = unsafe { CreateJobObjectW(None, windows::core::PCWSTR::null())? };
+
+    let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+    unsafe {
+        SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const std::ffi::c_void,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )?;
+    }
+
+    Ok(job)
+}
 
 fn repo_root() -> PathBuf {
     // src-tauri/ is always a direct child of the repo root at compile time --
@@ -212,6 +275,23 @@ pub fn run() {
                 .initialization_script(&init_script)
                 .build()?;
 
+            // Best-effort: a failure here (unexpected on any normal Windows
+            // install) just means this run doesn't get the crash-safety net
+            // below -- not worth failing the whole app over, the same
+            // "degrade, don't crash" judgment call the Python side makes for
+            // ModelDownloadError/OcrUnavailableError.
+            #[cfg(windows)]
+            match create_kill_on_close_job() {
+                Ok(job) => {
+                    let handle = HANDLE(child.as_raw_handle() as *mut _);
+                    if let Err(e) = unsafe { AssignProcessToJobObject(job, handle) } {
+                        log::warn!("could not assign the sidecar to its Job Object: {e}");
+                    }
+                    app.manage(SidecarJob(job));
+                }
+                Err(e) => log::warn!("could not create a Job Object for the sidecar: {e}"),
+            }
+
             app.manage(SidecarProcess(Mutex::new(Some(child))));
 
             Ok(())
@@ -219,11 +299,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the Tauri application")
         .run(|app_handle, event| {
-            // Windows doesn't auto-reap a child when this process exits --
-            // without this the sidecar outlives a closed window. A
-            // Job-Object-based guarantee (survives a crash, not just a
-            // clean exit) is a real gap, deliberately deferred rather than
-            // bundled into this first pass.
+            // The fast, explicit path for a clean window close -- the Job
+            // Object created in setup() (create_kill_on_close_job) is what
+            // covers every other way this process can end, including a
+            // crash, where this handler never runs at all.
             if let RunEvent::ExitRequested { .. } = event {
                 if let Some(state) = app_handle.try_state::<SidecarProcess>() {
                     if let Ok(mut guard) = state.0.lock() {

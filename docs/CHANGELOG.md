@@ -9,6 +9,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Windows Job Object for crash-safe sidecar cleanup** (deferred at M0).
+  `child.kill()` on the shell's `RunEvent::ExitRequested` only ever
+  guaranteed the sidecar died on a clean window close -- a hard crash of
+  the Tauri process (or a task-manager force-kill) skipped that handler
+  entirely and left the sidecar running. New
+  `src-tauri/src/lib.rs::create_kill_on_close_job` creates a Job Object with
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and assigns the sidecar to it right
+  after spawning: Windows closes every handle a process owns when that
+  process ends for any reason, so the OS itself kills every process still
+  in the job the moment this app's process exits, crash included, no
+  cooperative code required. The existing `ExitRequested` handler stays as
+  the fast path for the common clean-close case.
+  - New direct dependency: `windows` (already resolved transitively via
+    tauri/wry, so this pins the same version rather than risking a second
+    one), scoped to `[target.'cfg(windows)'.dependencies]` matching this
+    project's existing Windows-only `#[cfg(windows)]` code.
+  - Verified for real: launched a debug build, force-killed the parent
+    process (`Stop-Process -Force`, simulating a crash) with the sidecar
+    confirmed as its child beforehand -- the sidecar died with it. Re-ran
+    the existing clean-`WM_CLOSE`-close check too, to confirm no
+    regression there.
+
 - **PDF export for tailored resumes** (spec §5, deferred at M3: "TeX-distribution
   detection and subprocess execution is an independent concern from the splice
   engine itself"). New `placeinator/latex/compile.py` shells out to a bundled

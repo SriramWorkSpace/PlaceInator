@@ -134,14 +134,25 @@ default and CI's `model` step, see pyproject.toml), since paying a
 13-minute network-dependent cost on every CI run for one already-proven
 code path isn't worth the reliability risk.
 
+The Windows Job Object (deferred at M0: `child.kill()` on `ExitRequested`
+only guaranteed a clean-close kill, not a crash-safe one) is also no longer
+deferred: `src-tauri/src/lib.rs::create_kill_on_close_job` creates a Job
+Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and assigns the sidecar to
+it right after spawning. Windows closes every handle a process owns when
+that process ends for *any* reason, so the OS itself kills every process
+still assigned to the job the moment this app's own process exits --
+crash, `TerminateProcess`, or a clean close alike -- with no cooperative
+shutdown code required. The `ExitRequested` handler's explicit
+`child.kill()` stays too, as the fast, deliberate path for the common
+clean-close case; the Job Object is purely the safety net for everything
+else. Verified for real, not just built: launched a debug build, confirmed
+the sidecar as its child process, then `Stop-Process -Force`'d the parent
+(simulating a crash) -- the sidecar died with it. A clean `WM_CLOSE` close
+was re-tested too, to confirm no regression there.
+
 **Deliberately deferred**, each flagged at the time it was skipped rather than
 silently dropped:
 
-- **A Windows Job Object** (M0) — today's `child.kill()` on the shell's
-  `ExitRequested` event only guarantees the sidecar dies on a clean window
-  close, not a hard crash. Reconfirmed against the installed M6 build: a
-  clean close (`WM_CLOSE`) kills the sidecar correctly; force-killing the
-  parent (simulating a crash) leaves it orphaned, exactly as documented here.
 - **OCR for scanned placement attachments** (M4) — Tesseract isn't installed
   on the dev machine, the same class of external system dependency as the
   Rust/MSVC and Google Cloud OAuth setups; `OcrUnavailableError` degrades
