@@ -4,9 +4,7 @@
     <a href="#setup"><strong>Get started »</strong></a>
     <br />
     <br />
-  <a href="docs/architecture.md">Architecture</a> |
-  <a href="docs/specification.md">Specification</a> |
-  <a href="docs/roadmap.md">Roadmap</a>
+  <a href="docs/architecture.md">Architecture</a>
 </h4>
 
 <h4 align="center">
@@ -26,8 +24,8 @@
 Runs entirely on the user's machine: SQLite for storage, ONNX Runtime for embeddings
 (never PyTorch — see [ADR 0005](docs/decisions.md#adr-0005--fastembed--onnx-runtime-never-pytorch)),
 no LLM anywhere in the pipeline (see [ADR 0002](docs/decisions.md#adr-0002--deterministic-engine-no-llm-generation)).
-Full feature list in [the specification](docs/specification.md); current build status in
-[the roadmap](docs/roadmap.md).
+Current build status and full milestone history in
+[the architecture doc](docs/architecture.md#milestone-status).
 
 ## How it works
 
@@ -73,9 +71,7 @@ logs everything else to stderr, so that channel never carries anything but the h
 
 | Document | What it covers |
 |---|---|
-| [Specification](docs/specification.md) | Feature requirements — the source of truth |
-| [Architecture](docs/architecture.md) | System design, handshake protocol, module map |
-| [Roadmap](docs/roadmap.md) | Milestones M0–M6 |
+| [Architecture](docs/architecture.md) | System design, handshake protocol, module map, and milestone status (M0–M6) |
 | [Changelog](docs/CHANGELOG.md) | What changed and when |
 | [Decisions](docs/decisions.md) | ADRs recording the durable "why" |
 | [Foundation audit](docs/audit-2026-08-19.md) | Nine defects found before development, in detail |

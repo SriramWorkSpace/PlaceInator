@@ -1,8 +1,10 @@
 # Architecture
 
-How PlaceInator is put together and why. The feature requirements live in
-[specification.md](./specification.md); the decisions behind this design live in
-[decisions/](./decisions/).
+How PlaceInator is put together and why, and where each milestone stands. The
+original feature requirements document (`specification.md`) has been retired
+now that the milestones it drove are built — its section numbering survives
+in the module map below (§1–§7), and its UI direction was superseded by
+ADR 0006. The decisions behind this design live in [decisions.md](./decisions.md).
 
 ## System shape
 
@@ -85,6 +87,55 @@ Flat feature packages, each mapping to a numbered specification section.
 
 Root modules: `app.py` (application factory), `main.py` (entry point and handshake),
 `settings.py` (configuration and paths), `security.py` (token auth).
+
+## Milestone status
+
+| Milestone | Status |
+|---|---|
+| M0 — Foundation | Sidecar + frontend done; desktop shell works in dev mode; PyInstaller packaging not wired |
+| M1 — Profile, Resume, Matching | Complete |
+| M2 — Job Intelligence | Complete |
+| M3 — LaTeX Tailoring | Complete, except PDF compile |
+| M4 — Placement Automation | Complete, except OCR for scanned images |
+| M5 — Career Intelligence & Outreach | Complete |
+| M6 — Hardening & Release | Not started |
+
+**Deliberately deferred**, each flagged at the time it was skipped rather than
+silently dropped:
+
+- **PyInstaller bundling** (M0) — onnxruntime's native libraries are flagged
+  in two ADRs (0001, 0005) as the likely packaging problem; wiring
+  `bundle.externalBin` is separate, riskier work that wasn't bundled into the
+  same pass as the first Rust code this repo ever had.
+- **A Windows Job Object** (M0) — today's `child.kill()` on the shell's
+  `ExitRequested` event only guarantees the sidecar dies on a clean window
+  close, not a hard crash.
+- **PDF compile** (M3) — TeX-distribution detection and subprocess execution
+  is an independent concern from the splice engine itself.
+- **OCR for scanned placement attachments** (M4) — Tesseract isn't installed
+  on the dev machine, the same class of external system dependency as the
+  Rust/MSVC and Google Cloud OAuth setups; `OcrUnavailableError` degrades
+  honestly instead of crashing or guessing.
+- **Skill taxonomy at 89 of ~600 originally-scoped entries** (M1) — tracked
+  openly as the project's clearest known gap; expanding it is a deliberate
+  later decision, not an oversight, since the whole matching pipeline is the
+  thing that needed proving out first.
+
+**Two bugs worth remembering, both cross-milestone lessons:**
+
+- **robots.txt evaluation** (M2): the stdlib's `RobotFileParser` applies the
+  *first* matching rule in a file, not RFC 9309's longest-match — and a first
+  fix that read decisions off its private attributes broke differently
+  across Python patch versions (passed on 3.13.7, failed on CI's 3.13.15).
+  Rewritten to parse raw `robots.txt` text directly
+  (`placeinator/jobs/sources/base.py`), no stdlib dependency at all.
+- **Component score bounds** (M2): float32 cosine similarity can land a few
+  ULPs above 1.0, differently per CPU, so a bound that only clamps the floor
+  isn't actually a bound. `clamp_unit` (`placeinator/matching/scoring.py`)
+  clamps both ends.
+
+For the full chronological record of every change, see
+[CHANGELOG.md](./CHANGELOG.md).
 
 ## The matching engine
 
@@ -204,10 +255,10 @@ SQLite in the per-user data directory (`Settings.data_dir`), WAL mode, foreign k
 A warm "studio" visual language — self-hosted Fraunces for display headings,
 Inter for UI text, cream canvas, fully-rounded pill controls, and a distinct
 muted accent color per section — superseding the original flat GitHub-adjacent
-brief. See [ADR 0006](./decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction) for why, and
-for the note that `specification.md`'s UI section (lines 767-807) is not kept
-in sync with this. Design tokens live in `src/styles/index.css` and handle
-light, dark, and system themes.
+brief the retired specification document originally called for. See
+[ADR 0006](./decisions.md#adr-0006--studio-visual-language-superseding-the-github-adjacent-direction)
+for the full pivot story. Design tokens live in `src/styles/index.css` and
+handle light, dark, and system themes.
 
 `Page` and `SectionCard` (`src/components/Page.tsx`) share one recurring
 pattern — a colored eyebrow naming the section, a serif display heading, then

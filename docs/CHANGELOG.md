@@ -7,6 +7,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation
+
+- **Consolidated docs from 6 files down to 4.** `specification.md`,
+  `build-guide.md`, and `roadmap.md` are retired. Their essential content
+  moved into `architecture.md`:
+  - The original requirements document (`specification.md`) is superseded
+    by what's actually built — its §1–§7 section numbering survives in
+    `architecture.md`'s module map, and its now-outdated UI direction was
+    already documented as superseded by ADR 0006.
+  - `roadmap.md`'s per-milestone status compacted into a new "Milestone
+    status" section in `architecture.md`: a status table, the list of
+    deliberate deferrals (PyInstaller bundling, the Windows Job Object,
+    PDF compile, OCR, taxonomy coverage), and the two cross-milestone bugs
+    worth remembering (robots.txt evaluation, component score bounds).
+    `CHANGELOG.md` (this file) remains the detailed chronological record.
+  - `build-guide.md`'s narrative content is superseded by the more compact
+    Milestone status section plus this changelog's own per-entry detail.
+  - Every surviving cross-reference to the three retired files (in
+    `architecture.md`, `decisions.md`, `README.md`) was updated so nothing
+    links to a file that no longer exists.
+
 ### Added
 
 - **M5: Career intelligence and outreach** (spec §4, §6) — the final

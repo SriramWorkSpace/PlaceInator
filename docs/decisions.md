@@ -28,9 +28,9 @@ Python's strongest ground: ONNX-based sentence embeddings, document parsing
 
 Two further constraints pull in opposite directions:
 
-- The spec ([specification.md](./specification.md) line 828) wants the Resume Tailoring
-  page to feel like a developer workspace, with the JD and LaTeX source in real editor
-  panels. That points at a web view and Monaco.
+- The spec (the original requirements document, since retired — line 828 asked for
+  this) wants the Resume Tailoring page to feel like a developer workspace, with the
+  JD and LaTeX source in real editor panels. That points at a web view and Monaco.
 - The ML and document stack is mature in Python and thin or absent in Rust. Rewriting
   it would be a project in itself.
 
@@ -186,8 +186,9 @@ test (parse → emit unchanged, byte-for-byte) a meaningful correctness gate.
 
 ### Context
 
-The spec asks for job discovery from "supported sources" ([specification.md](./specification.md)
-§2). The user chose to target **Indeed, Naukri, and LinkedIn** by scraping.
+The spec (the original requirements document, since retired) asked for job discovery
+from "supported sources" (§2). The user chose to target **Indeed, Naukri, and
+LinkedIn** by scraping.
 
 That choice runs into a limit the spec itself sets. Lines 836-842 place the following
 explicitly out of scope:
@@ -410,13 +411,14 @@ All wheels. No source builds. **No PyTorch anywhere in the tree.**
 
 ### Context
 
-`docs/specification.md` (the user's verbatim, never-edited source of truth) calls
-for a flat, restrained visual language: "minimal, clean, GitHub-inspired," a
-single accent color, subtle 1px borders, and explicitly warns against "overly
-rounded 'AI SaaS' cards" and "excessive gradients." Earlier in the project the
-user confirmed this direction directly, choosing "GitHub-adjacent" over two
-warmer/rounder alternatives when asked. `src/styles/index.css` and every shared
-component were built to that brief.
+The original requirements document (`docs/specification.md`, since retired —
+its content is summarized in `docs/architecture.md`'s Milestone status and
+module map) called for a flat, restrained visual language: "minimal, clean,
+GitHub-inspired," a single accent color, subtle 1px borders, and explicitly
+warned against "overly rounded 'AI SaaS' cards" and "excessive gradients."
+Earlier in the project the user confirmed this direction directly, choosing
+"GitHub-adjacent" over two warmer/rounder alternatives when asked.
+`src/styles/index.css` and every shared component were built to that brief.
 
 The user then supplied three reference screenshots of a Dribbble shot
 ("Synchronic — Studio Creative Practice System") and asked to match its
@@ -427,10 +429,11 @@ and a distinct accent color per section rather than one restrained accent.
 
 Given three detailed, unambiguous reference images and an explicit "use the
 same," this is read as a deliberate pivot rather than a subtle nudge, and
-implemented as one. `specification.md` is not edited to match — it stays the
-user's original written brief — but the implementation now departs from that
-section of it. This ADR exists so that departure is a recorded decision, not
-silent drift.
+implemented as one. The original spec document was never edited to match at
+the time — it stayed the user's original written brief while the
+implementation departed from that section of it — and has since been
+retired entirely now that the milestones it drove are built. This ADR exists
+so that departure is a recorded decision, not silent drift.
 
 ### Decision
 
@@ -481,9 +484,10 @@ borrows Tend's teal for exactly this reason.
   file wiring it by hand.
 - **Cost:** every shared component (`Page`, `Form`, `Table`, `AppShell`) and
   every route needed a pass; this was a full re-theme, not a token tweak.
-- **specification.md's UI section (lines 767-807) is now aspirational text
-  the implementation has moved past**, not a description of the app. Anyone
-  reading the spec for how the app currently looks should read this file and
+- **The original spec's UI section was aspirational text the implementation
+  moved past**, not a description of the app — one of the reasons that
+  document was retired rather than kept as a source of truth. Anyone wanting
+  to know how the app currently looks should read this ADR and
   `docs/architecture.md`'s Frontend section instead.
 - Nine icon paths from the earlier icon-placement pass (ADR-adjacent work
   from two sessions prior) carry forward unchanged into the new visual
