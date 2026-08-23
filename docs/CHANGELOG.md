@@ -9,6 +9,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **M5: Career intelligence and outreach** (spec §4, §6) — the final
+  feature milestone; only M6 (hardening/release) remains.
+  - **Skill-gap analysis needs no new database table.** It's a pure
+    aggregation over data already kept fresh (`Job.required_skill_ids`,
+    `ResumeChunk.skill_ids`, `rank_jobs`'s scores), the same "computed
+    fresh, no dedicated table" shape `rank_jobs` itself uses. New
+    `placeinator/career/gaps.py::aggregate_skill_gaps` prioritizes by
+    summing `JobRanking.overall_score` across the jobs requiring a
+    missing skill — "frequency × role relevance" (spec §4) without a
+    second relevance metric, since `overall_score` already encodes it.
+  - **`placeinator/skills/resources.json`**: 26 curated learning
+    resources keyed by taxonomy skill id. Every URL was checked live
+    before being added — this caught one stale link
+    (`cloud.google.com/docs`'s permanent redirect to
+    `docs.cloud.google.com/docs`) and fixed it to the canonical target.
+    A skill with no entry has none in the API response, never a
+    fabricated one — the same honest-gap shape as `taxonomy.json` itself.
+  - **Cold-mail drafting is Jinja2-templated from real match evidence,
+    never generated prose** (ADR 0002). New `placeinator/outreach/`
+    package: `templates.py` is a pure rendering function over
+    already-extracted data; `service.py` pulls a job's top matching
+    resume bullets and matched skills out of `MatchResult.explanation`
+    before the template ever sees them, and reuses `rank_jobs` directly
+    for "Cold-Mail Target Selection" rather than a second scorer.
+  - New `OutreachDraft` table (upserts on `(resume_id, job_id)`, same
+    shape as `MatchResult`/`TailoredResume`; deliberately no "sent"
+    status — this app has no way to know if a draft was actually sent).
+  - `GET /api/career/skill-gaps`; `GET /api/outreach/targets`,
+    `GET/POST /api/outreach/drafts`, `DELETE /api/outreach/drafts/{id}`;
+    rebuilt `src/routes/Career.tsx` and `src/routes/Outreach.tsx` — no
+    send action exists anywhere in the outreach UI, matching spec line
+    423 as a structural property, not just a stated intention.
+  - Verified end to end against a real onboarded profile, resume, and
+    job (`tests/integration/test_m5_flow.py`): a real skill gap surfaces
+    with real job evidence, and a generated draft cites the resume's
+    actual bullet text verbatim, not a paraphrase.
+
 - **M4: Placement automation** (spec §7) — Gmail → attachments → candidate
   identification → status/event extraction → duplicate-safe persistence →
   Calendar. New `placeinator/placement/` package:

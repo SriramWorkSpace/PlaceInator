@@ -8,7 +8,17 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from placeinator.api import health, jobs, latex, matching, placement, profile, resumes
+from placeinator.api import (
+    career,
+    health,
+    jobs,
+    latex,
+    matching,
+    outreach,
+    placement,
+    profile,
+    resumes,
+)
 from placeinator.db.migrate import upgrade_to_head
 from placeinator.security import require_token
 from placeinator.settings import get_settings
@@ -65,5 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(matching.router, dependencies=[protected])
     app.include_router(latex.router, dependencies=[protected])
     app.include_router(placement.router, dependencies=[protected])
+    app.include_router(career.router, dependencies=[protected])
+    app.include_router(outreach.router, dependencies=[protected])
 
     return app

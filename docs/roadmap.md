@@ -273,10 +273,65 @@ fetch → attachment parsing → header normalization → candidate identificati
 
 ## M5 — Career intelligence and outreach
 
-- Skill-gap aggregation across ranked target jobs
-- Prioritization by frequency × role relevance
-- Curated `resources.json` keyed by taxonomy ID (deterministic — no invented links)
-- Cold-mail drafting from match evidence; always a draft, never auto-sent
+*Complete.* Neither spec §4 nor §6 defines a rigid schema, so this milestone
+had more real design latitude than M4's (whose DB schema was already built
+in advance) — the guiding move throughout was reuse over invention:
+
+- **Skill-gap analysis needs no new database table at all.** It's a pure
+  aggregation over data that already exists and is already kept fresh
+  (`Job.required_skill_ids`, `ResumeChunk.skill_ids`, `rank_jobs`'s scores)
+  — the same "computed fresh, no dedicated table" shape `rank_jobs`/
+  `list_notifications` themselves already use.
+- **Prioritization by frequency × role relevance, without a second
+  relevance metric.** `placeinator/career/gaps.py::aggregate_skill_gaps`
+  accumulates each missing skill's priority by summing
+  `JobRanking.overall_score` across the jobs requiring it — a skill
+  appearing in several *highly-ranked* jobs naturally outscores one
+  appearing only in a marginal match, because `overall_score` already
+  encodes role/location/salary/preference relevance
+  (`placeinator/jobs/filtering.py`). Preferred-but-not-required skills
+  count at half weight; hard-filtered jobs are excluded entirely (not a
+  real target, so its requirements shouldn't drive what to learn next).
+- **`placeinator/skills/resources.json`**: 26 curated entries, keyed by
+  taxonomy skill id. Every URL was checked live (via `WebFetch`) before
+  being added, not recalled from training data — this caught one stale
+  link (`cloud.google.com/docs` now redirects permanently to
+  `docs.cloud.google.com/docs`; fixed to the canonical target rather than
+  left to rely on the redirect). A skill with no curated entry simply has
+  none in the API response — never a fabricated one. Partial coverage
+  mirrors `taxonomy.json`'s own honest 89/~600 gap: the loader degrades
+  correctly for a miss from day one, so growing coverage later needs no
+  code change.
+- **Cold-mail drafting is Jinja2-templated from real match evidence, never
+  generated prose** (ADR 0002). `placeinator/outreach/templates.py` fills
+  a plain-text template from already-extracted data only —
+  `placeinator/outreach/service.py` is what pulls a job's top 3
+  `projects`/`experience` evidence bullets and matched skill ids out of
+  `MatchResult.explanation` (the same "top contributing chunks" record
+  that already powers notification reasons, resume recommendation, and
+  the tailoring change log) before the template ever sees them. "Cold-Mail
+  Target Selection" (spec §6) reuses `rank_jobs` directly rather than a
+  second scorer, the identical reasoning as skill-gap prioritization.
+- **`OutreachDraft`** (new table, one migration on top of
+  `e5234ad4fa59`): upserts on `(resume_id, job_id)`, same shape as
+  `MatchResult`/`TailoredResume`. Deliberately no "sent" status column —
+  the app has no way to know whether a draft was actually sent outside
+  itself, so it doesn't pretend to track that.
+- **`GET /api/career/skill-gaps`**; `GET /api/outreach/targets`,
+  `GET/POST /api/outreach/drafts`, `DELETE /api/outreach/drafts/{id}`; a
+  rebuilt `src/routes/Career.tsx` (ranked gap list, real job evidence,
+  resource link only when one exists) and `src/routes/Outreach.tsx`
+  (resume picker, target list, per-target draft view with copy-to-
+  clipboard) — **no send action exists anywhere in the UI**, matching spec
+  line 423 ("The system assists with preparation rather than automatically
+  sending messages... without user control") as a structural property of
+  what was built, not just a stated intention.
+- **Done when:** verified against a real onboarded profile with a real
+  resume and a real job requiring a skill the resume doesn't have —
+  `tests/integration/test_m5_flow.py` asserts the gap surfaces with real
+  job evidence, and a generated draft cites the resume's actual bullet
+  text verbatim (`"10k requests/sec"`/`"payments platform"`), not a
+  paraphrase.
 
 ## M6 — Hardening and release
 

@@ -263,3 +263,54 @@ export interface PlacementRecordOut {
 }
 
 export type PlacementTimeline = Record<string, PlacementRecordOut[]>;
+
+// -- Career skill intelligence (spec §4) -------------------------------------
+
+export interface GapEvidenceOut {
+  job_id: number;
+  company: string;
+  designation: string;
+  required: boolean;
+}
+
+export interface ResourceOut {
+  title: string;
+  url: string;
+}
+
+export interface SkillGapOut {
+  /** Taxonomy skill id -- see placeinator/skills/taxonomy.json. */
+  skill_id: string;
+  priority: number;
+  evidence: GapEvidenceOut[];
+  /** Null when no verified resource exists yet for this skill -- never a
+   * fabricated link (placeinator.career.resources' own contract). */
+  resource: ResourceOut | null;
+}
+
+// -- Personalized cold outreach (spec §6) ------------------------------------
+
+export interface OutreachTargetJobOut {
+  id: number;
+  company: string;
+  designation: string;
+  location: string | null;
+}
+
+export interface OutreachTargetOut {
+  job: OutreachTargetJobOut;
+  overall_score: number;
+}
+
+export interface DraftIn {
+  resume_id: number;
+  job_id: number;
+}
+
+export interface OutreachDraftOut {
+  id: number;
+  resume_id: number;
+  job_id: number;
+  subject: string;
+  body: string;
+}

@@ -9,6 +9,7 @@
 import type {
   AtsFeedIn,
   AtsFeedOut,
+  DraftIn,
   ExtractedJobFields,
   ExtractedProfileFields,
   JdSourceFormat,
@@ -18,12 +19,15 @@ import type {
   JobSearchOut,
   ManualJobIn,
   MatchOut,
+  OutreachDraftOut,
+  OutreachTargetOut,
   PlacementConnectionStatus,
   PlacementRecordOut,
   PlacementTimeline,
   ProfileIn,
   ProfileOut,
   ResumeOut,
+  SkillGapOut,
   SourceFormat,
   TailorIn,
   TailorOut,
@@ -288,3 +292,48 @@ export const rejectPlacementRecord = (recordId: number) =>
   apiFetch<void>(`/api/placement/review/${recordId}/reject`, { method: "POST" });
 
 export const getPlacementTimeline = () => apiFetch<PlacementTimeline>("/api/placement/timeline");
+
+// -- Career skill intelligence (spec §4) -------------------------------------
+
+export async function listSkillGaps(): Promise<SkillGapOut[]> {
+  try {
+    return await apiFetch<SkillGapOut[]>("/api/career/skill-gaps");
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+// -- Personalized cold outreach (spec §6) ------------------------------------
+
+export async function listOutreachTargets(): Promise<OutreachTargetOut[]> {
+  try {
+    return await apiFetch<OutreachTargetOut[]>("/api/outreach/targets");
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+export async function listOutreachDrafts(): Promise<OutreachDraftOut[]> {
+  try {
+    return await apiFetch<OutreachDraftOut[]>("/api/outreach/drafts");
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("412:")) {
+      throw new NotOnboardedError("profile not onboarded yet");
+    }
+    throw err;
+  }
+}
+
+/** Generates (or regenerates) a draft for one resume/job pair -- always a
+ * template fill from real match evidence, never sent by this app. */
+export const createOutreachDraft = (data: DraftIn) =>
+  apiFetch<OutreachDraftOut>("/api/outreach/drafts", { method: "POST", body: JSON.stringify(data) });
+
+export const deleteOutreachDraft = (draftId: number) =>
+  apiFetch<void>(`/api/outreach/drafts/${draftId}`, { method: "DELETE" });

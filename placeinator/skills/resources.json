@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "resources": {
+    "python": {"title": "Python Documentation", "url": "https://docs.python.org/3/"},
+    "javascript": {"title": "JavaScript | MDN", "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript"},
+    "typescript": {"title": "TypeScript Documentation", "url": "https://www.typescriptlang.org/docs/"},
+    "go": {"title": "Go Documentation", "url": "https://go.dev/doc/"},
+    "rust": {"title": "The Rust Programming Language", "url": "https://doc.rust-lang.org/book/"},
+    "react": {"title": "React Quick Start", "url": "https://react.dev/learn"},
+    "django": {"title": "Django Documentation", "url": "https://docs.djangoproject.com/en/stable/"},
+    "fastapi": {"title": "FastAPI Documentation", "url": "https://fastapi.tiangolo.com/"},
+    "nextjs": {"title": "Next.js Documentation", "url": "https://nextjs.org/docs"},
+    "spring-boot": {"title": "Spring Boot", "url": "https://spring.io/projects/spring-boot"},
+    "pytorch": {"title": "PyTorch Tutorials", "url": "https://docs.pytorch.org/tutorials/"},
+    "pandas": {"title": "pandas Documentation", "url": "https://pandas.pydata.org/docs/"},
+    "aws": {"title": "AWS Overview Whitepaper", "url": "https://docs.aws.amazon.com/whitepapers/latest/aws-overview/introduction.html"},
+    "gcp": {"title": "Google Cloud Documentation", "url": "https://docs.cloud.google.com/docs"},
+    "azure": {"title": "Azure Documentation", "url": "https://learn.microsoft.com/en-us/azure/"},
+    "docker": {"title": "Docker Documentation", "url": "https://docs.docker.com/"},
+    "kubernetes": {"title": "Kubernetes Documentation", "url": "https://kubernetes.io/docs/home/"},
+    "git": {"title": "Git Documentation", "url": "https://git-scm.com/docs"},
+    "terraform": {"title": "Terraform Documentation", "url": "https://developer.hashicorp.com/terraform/docs"},
+    "postgresql": {"title": "PostgreSQL Documentation", "url": "https://www.postgresql.org/docs/"},
+    "mongodb": {"title": "MongoDB Documentation", "url": "https://www.mongodb.com/docs/"},
+    "redis": {"title": "Redis Quick Starts", "url": "https://redis.io/docs/latest/develop/get-started/"},
+    "machine-learning": {"title": "Machine Learning Crash Course", "url": "https://developers.google.com/machine-learning/crash-course"},
+    "system-design": {"title": "System Design Primer", "url": "https://github.com/donnemartin/system-design-primer"},
+    "rest-api": {"title": "REST | MDN", "url": "https://developer.mozilla.org/en-US/docs/Glossary/REST"},
+    "data-structures-algorithms": {"title": "Data Structures and Algorithms", "url": "https://www.geeksforgeeks.org/dsa/data-structures/"}
+  }
+}

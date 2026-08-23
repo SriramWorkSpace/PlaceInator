@@ -28,6 +28,9 @@ dependencies = [
     "google-api-python-client>=2.198",
     "dateparser>=1.2",
     "keyring>=25.5",
+    # Cold outreach (spec §6, ADR 0002): Jinja2 templates filled from real
+    # match evidence -- never generated prose, no LLM.
+    "jinja2>=3.1",
     # Job source adapters (ADR 0003): manual, ats_feed, indeed, linkedin,
     # naukri. No Playwright -- verified live that indeed's search-results
     # page is plain server-rendered HTML (a JSON blob embedded in <script>,

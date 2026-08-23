@@ -351,6 +351,42 @@ class TailoredResume(Base, TimestampMixin):
 
 
 # --------------------------------------------------------------------------- #
+# Personalized cold outreach (spec section 6)
+# --------------------------------------------------------------------------- #
+
+
+class OutreachDraft(Base, TimestampMixin):
+    """One (resume, job) cold-outreach draft -- Jinja2-templated from real
+    match evidence (ADR 0002), never generated prose. Recomputed and
+    overwritten on every draft request, same shape as TailoredResume: no
+    freshness gate, since drafting is user-triggered, not polled.
+
+    The user reviews and sends every message themselves (spec line 423) --
+    nothing in this app ever sends an email. There is deliberately no
+    "sent"/"status" column: a draft that no longer exists here was either
+    never generated or the user regenerated it, and this app has no way to
+    know whether it was actually sent outside itself, so it doesn't
+    pretend to track that.
+    """
+
+    __tablename__ = "outreach_draft"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    resume_id: Mapped[int] = mapped_column(ForeignKey("resume.id", ondelete="CASCADE"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id", ondelete="CASCADE"))
+
+    subject: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+
+    resume: Mapped[Resume] = relationship()
+    job: Mapped[Job] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("resume_id", "job_id", name="uq_outreach_draft_resume_job"),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Placement automation (spec section 7)
 # --------------------------------------------------------------------------- #
 
