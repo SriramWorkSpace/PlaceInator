@@ -7,6 +7,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Skill taxonomy: 89 → 133 entries, precision fixes first.** The "~600
+  originally scoped" target (deferred at M1) was retired, not chased --
+  traced back through git history to the very first commit's `roadmap.md`,
+  written before any code existed, with no cited methodology or external
+  source. Two evidence-driven passes instead:
+  - **Precision fixes** (the more important half, per explicit direction):
+    audited the taxonomy against 180 real, current job postings pulled
+    live via `placeinator.jobs.sources.ats_feed` (Greenhouse/Ashby, the
+    same adapter the app itself uses -- not synthetic fixtures). Several
+    aliases turned out to be common English words rather than technical
+    terms: bare `security` and `c` were the **#1 and #2 most-matched
+    skills in the entire taxonomy** before the fix, almost entirely from
+    "we take security seriously" boilerplate and "Series C" funding
+    mentions; bare `go` matched "go-to-market" in **100%** of its hits,
+    never the language; bare `excel` was majority the verb ("you excel
+    in..."); bare `spring` risked matching the season. One alias
+    (`ruby`'s `"ruby on rails' language"`) had visibly corrupted text.
+    `aws` collapsed EC2/S3/Lambda into one id, losing signal
+    `career.gaps` could otherwise use; `dotnet-core`'s alias list
+    conflated classic ASP.NET with ASP.NET Core. All fixed. Every
+    existing skill id preserved unchanged -- `resources.json` and every
+    caller stayed compatible with no code changes.
+  - **Five new categories**, populated by real evidence: testing-tool,
+    ci-cd-tool, observability, data-tool, ai-tool. `salesforce` (27/180
+    postings, entirely absent before) was the single strongest corpus
+    signal found. `product-management` (12/180) was the next-clearest.
+    Where the modest sample (12 companies, fintech/big-tech-skewed --
+    explicitly *not* treated as statistically definitive) didn't
+    independently surface an entry, well-justified adjacent tools within
+    an evidenced category were added instead of padding toward a count --
+    e.g. `apache spark`'s 24/180 "hit rate" turned out to be one
+    company's repeated marketing boilerplate ("spark innovation") on
+    inspection, not real signal, so the alias was tightened rather than
+    counted as evidence.
+  - New regression tests in `tests/unit/test_taxonomy.py` pin every false
+    positive found (by the real sentence that broke it) alongside proof
+    the legitimate specific phrasing still matches. Full verification
+    sweep run: `test_taxonomy.py`, `test_matching_cache.py`,
+    `test_chunking.py`, `test_latex_tailoring.py`, `test_career_gaps.py`,
+    `test_career_resources.py`, and the real-embedding `test_m1_flow.py`/
+    `test_m5_flow.py` integration suites all pass unchanged.
+
 ### Added
 
 - **OCR fallback for scanned placement-sheet attachments** (deferred at

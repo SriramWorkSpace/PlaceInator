@@ -7,8 +7,9 @@ training data -- the same discipline already applied to robots.txt
 behavior, pylatexenc's API, and every external claim this project has made.
 
 Partial coverage is the expected, supported state -- the same honest gap
-placeinator/skills/taxonomy.json itself carries (89 entries seeded, not all
-~600 originally scoped). A skill with no entry here simply has none; get()
+placeinator/skills/taxonomy.json itself carries (26 curated resources for
+133 skills; new skill ids are added without a matching resource entry as a
+matter of course). A skill with no entry here simply has none; get()
 returning None is not an error case to work around, it's the correct
 answer for "no verified resource exists yet".
 """

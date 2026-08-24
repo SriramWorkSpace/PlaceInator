@@ -168,13 +168,34 @@ auto-accepted regardless of match strength. Verified for real against the
 actual FastAPI endpoint, not mocked -- real ONNX inference on a synthetic
 scanned PDF, both the match and no-match paths.
 
-**Deliberately deferred**, each flagged at the time it was skipped rather than
-silently dropped:
+The skill taxonomy (deferred at M1, "89 of ~600 originally-scoped entries")
+is also no longer deferred, and the framing changed along with it: the
+"~600" figure was traced to the very first commit's `roadmap.md`, written
+before any code existed, with no cited methodology -- not derived from
+O*NET or any real external taxonomy. It was retired as a target rather than
+chased. The taxonomy grew from 89 to 133 entries instead by two separate,
+evidence-driven passes:
 
-- **Skill taxonomy at 89 of ~600 originally-scoped entries** (M1) — tracked
-  openly as the project's clearest known gap; expanding it is a deliberate
-  later decision, not an oversight, since the whole matching pipeline is the
-  thing that needed proving out first.
+- **Precision fixes first** (the more important half). Several existing
+  aliases were common English words, not just technical terms --
+  `security`, `spring`, bare `c`, `go`, and `excel` -- and a live audit
+  against 180 real, current postings (pulled via `placeinator.jobs.sources
+  .ats_feed`, the same adapter the app itself uses) proved it: before the
+  fix, `cybersecurity` and `c` were the #1 and #2 most-matched skills in
+  that corpus, almost entirely from "we take security seriously"
+  boilerplate and "Series C" funding mentions, and `go` was matching
+  "go-to-market" 100% of the time, never the language. One alias
+  (`ruby`'s) had visibly corrupted text. `aws` collapsed EC2/S3/Lambda
+  into one id, and `dotnet-core` conflated classic ASP.NET with ASP.NET
+  Core. All fixed; every existing skill id preserved unchanged.
+- **Five new categories** added with real justification each --
+  testing-tool, ci-cd-tool, observability, data-tool, ai-tool -- populated
+  by corpus frequency where it existed (`salesforce` at 27/180 was the
+  single strongest, and entirely absent before) plus well-justified
+  adjacent tools within categories the corpus evidence already supported,
+  not padding toward a count. `resources.json` needed no changes -- new
+  ids simply have no curated resource yet, the same honest partial-coverage
+  contract it already had.
 
 **Two bugs worth remembering, both cross-milestone lessons:**
 
