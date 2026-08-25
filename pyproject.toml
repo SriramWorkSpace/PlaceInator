@@ -50,6 +50,9 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.8",
     "mypy>=1.13",
+    # Vulnerability scanning against the resolved environment (see ci.yml) --
+    # the Python-side equivalent of the frontend's `npm audit` gate.
+    "pip-audit>=2.7",
 ]
 
 [build-system]

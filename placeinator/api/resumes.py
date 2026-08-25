@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from placeinator.api.uploads import read_upload
 from placeinator.db.models import Profile, Resume
 from placeinator.db.session import get_session
 from placeinator.profile.service import get_profile
@@ -98,7 +99,7 @@ async def extract_profile_from_resume(
     via POST /api/resumes once the user confirms the profile form."""
     parsed_format = _parse_source_format(source_format)
 
-    file_bytes = await file.read()
+    file_bytes = await read_upload(file)
     try:
         fields = extract_profile_preview(parsed_format, file_bytes)
     except EmptyDocumentError as exc:
@@ -128,7 +129,7 @@ async def upload_resume(
     profile = _require_profile(session)
     parsed_format = _parse_source_format(source_format)
 
-    file_bytes = await file.read()
+    file_bytes = await read_upload(file)
     try:
         resume = create_resume(
             session,

@@ -85,7 +85,8 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.dev_mode else None,
-        openapi_url="/openapi.json",
+        redoc_url="/redoc" if settings.dev_mode else None,
+        openapi_url="/openapi.json" if settings.dev_mode else None,
     )
 
     # The WebView serves the UI from a tauri:// or localhost:1420 origin, so the

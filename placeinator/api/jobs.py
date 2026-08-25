@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from placeinator.api.uploads import read_upload
 from placeinator.db.enums import SourceKind
 from placeinator.db.models import Job, Profile
 from placeinator.db.session import get_session
@@ -169,7 +170,7 @@ async def extract_job_from_file(
         )
     parsed_format = cast(JdSourceFormat, source_format)
 
-    file_bytes = await file.read()
+    file_bytes = await read_upload(file)
     try:
         text = parse_jd_bytes(file_bytes, parsed_format)
     except EmptyJdDocumentError as exc:

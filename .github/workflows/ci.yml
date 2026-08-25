@@ -22,6 +22,17 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: python -m ruff check placeinator tests migrations
       - run: python -m mypy placeinator
+      # No Python lockfile exists (see pyproject.toml's plain version ranges) --
+      # pip-audit with no requirements file audits the environment actually
+      # resolved and installed by the step above, which is the real
+      # equivalent of "locked" dependencies here. Fails on any known
+      # vulnerability (no severity flag exists in pip-audit, unlike npm
+      # audit's --audit-level, since OSV/PyPA advisories don't uniformly
+      # carry a CVSS score to filter on) -- the Python-side counterpart to
+      # the frontend's `npm audit` gate below. --skip-editable excludes the
+      # local `placeinator` package itself, which isn't published to PyPI
+      # and can't be looked up.
+      - run: python -m pip_audit --skip-editable
       # "not live and not model" is the default in pyproject: job-source
       # adapters and the real embedding model are both opt-in.
       - run: python -m pytest tests/ -q
@@ -43,6 +54,21 @@ jobs:
       # `live` tests stay opt-in: they hit real third-party job boards, so a
       # site being down is not this repo's build failing. `tex` tests stay
       # opt-in for the reason above.
+
+  rust:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      # --locked: Cargo.lock is tracked, so a drifted lockfile fails the
+      # build here rather than silently resolving new dependency versions.
+      - run: cargo check --locked
+        working-directory: src-tauri
+      - run: cargo test --locked
+        working-directory: src-tauri
 
   frontend:
     runs-on: ubuntu-latest

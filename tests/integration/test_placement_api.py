@@ -184,6 +184,31 @@ async def test_sync_without_onboarding_412s(client, _connected, monkeypatch):
     assert response.status_code == 412, response.text
 
 
+async def test_connect_without_a_client_secret_file_412s(client):
+    """No google_oauth_client.json exists under the test's tmp_path data
+    dir, so connect() must raise ClientSecretNotFoundError before ever
+    attempting the real interactive OAuth loopback flow."""
+    response = await client.post("/api/placement/connect")
+    assert response.status_code == 412, response.text
+
+
+async def test_disconnect_clears_the_stored_credential(client, _fake_keyring):
+    _fake_keyring[("placeinator", "google-oauth")] = "fake-stored-credential"
+
+    response = await client.post("/api/placement/disconnect")
+    assert response.status_code == 204, response.text
+    assert ("placeinator", "google-oauth") not in _fake_keyring
+
+    status_response = await client.get("/api/placement/status")
+    assert status_response.json() == {"connected": False}
+
+
+async def test_disconnect_when_not_connected_is_a_no_op(client, _fake_keyring):
+    response = await client.post("/api/placement/disconnect")
+    assert response.status_code == 204, response.text
+    assert _fake_keyring == {}
+
+
 async def test_a_strong_email_and_name_match_from_an_attachment_auto_accepts(
     client, _connected, _mock_calendar, monkeypatch
 ):
