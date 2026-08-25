@@ -155,7 +155,7 @@ def test_rank_500_cached_jobs(session: Session):
     )
     session.flush()
 
-    now = datetime.now(UTC)
+    jobs = []
     for i in range(500):
         job = Job(
             source=SourceKind.MANUAL,
@@ -167,6 +167,26 @@ def test_rank_500_cached_jobs(session: Session):
         )
         session.add(job)
         session.flush()
+        jobs.append(job)
+
+    # Captured only *after* every Job row above is already committed, not
+    # before the loop. Job.updated_at comes from TimestampMixin's
+    # server_default=func.now() (placeinator/db/base.py), which on SQLite is
+    # CURRENT_TIMESTAMP -- whole-SECOND granularity, unlike this Python
+    # microsecond timestamp. Capturing `now` before a ~250ms+ setup loop left
+    # a real race: if the loop straddled a wall-clock second boundary, jobs
+    # committed after the tick got a server-computed updated_at *later* than
+    # the precomputed `now`, failing _is_fresh's freshness check during the
+    # timed rank_jobs() call below and forcing a full cold rescore instead of
+    # the cache-hit path this test exists to measure. Confirmed directly by
+    # instrumented reproduction: 0-458 of 500 jobs went spuriously stale per
+    # run depending on where in the second `now` landed, correlating exactly
+    # with elapsed time from ~100ms up to ~35s. Capturing `now` after every
+    # Job is already persisted makes it >= every Job.updated_at by
+    # construction (same wall clock, strictly later instant), eliminating
+    # the race rather than tolerating it.
+    now = datetime.now(UTC)
+    for job in jobs:
         session.add(
             MatchResult(
                 job_id=job.id,
@@ -180,8 +200,19 @@ def test_rank_500_cached_jobs(session: Session):
         )
     session.flush()
     # Freshness also requires the row's updated_at >= job/resume updated_at
-    # (see placeinator.matching.service._is_fresh) -- both were flushed
-    # before any MatchResult, so this already holds without backdating them.
+    # (see placeinator.matching.service._is_fresh); resume was flushed before
+    # the job loop and every job is now guaranteed strictly before `now` by
+    # construction (see above), so this holds deterministically. Verified,
+    # not assumed: every job must be at or before `now`, or the cache-hit
+    # path below wouldn't actually be exercised and the measurement would be
+    # meaningless.
+    now_naive = now.astimezone(UTC).replace(tzinfo=None)
+    stale = [j.id for j in jobs if j.updated_at > now_naive]
+    assert not stale, (
+        f"{len(stale)} job(s) have updated_at after the reference timestamp -- "
+        "the freshness check would force a cold rescore, not the cache-hit path "
+        "this test measures"
+    )
 
     start = time.perf_counter()
     rankings = rank_jobs(session, profile)
