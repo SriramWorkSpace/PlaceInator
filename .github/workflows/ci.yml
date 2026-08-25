@@ -63,6 +63,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      # tauri_build::build() (called from src-tauri/build.rs) validates every
+      # bundle.resources path in tauri.conf.json at build time, even for
+      # `cargo check` -- including ../packaging/dist/PlaceInatorBackend, the
+      # PyInstaller-frozen sidecar. packaging/{build,dist}/ are gitignored
+      # build output (see .gitignore), never checked in, so a fresh checkout
+      # has neither. Actually running PyInstaller here is out of scope for a
+      # Rust-only job (needs the full Python env plus a model download); an
+      # empty placeholder satisfies tauri_build's existence check without
+      # claiming to validate the bundle's real contents -- `tauri build`
+      # (never run in this job) is what would catch a genuinely missing
+      # backend.
+      - run: New-Item -ItemType Directory -Force -Path packaging/dist/PlaceInatorBackend
       # --locked: Cargo.lock is tracked, so a drifted lockfile fails the
       # build here rather than silently resolving new dependency versions.
       - run: cargo check --locked
