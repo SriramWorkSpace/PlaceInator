@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { Badge } from "@/components/Badge";
 import { Button, ErrorText } from "@/components/Form";
+import { GroupsIcon } from "@/components/icons";
 import { EmptyState, Page, SectionCard } from "@/components/Page";
 import {
   confirmPlacementRecord,
@@ -12,7 +14,25 @@ import {
   rejectPlacementRecord,
   syncPlacementMail,
 } from "@/lib/api";
-import type { PlacementRecordOut } from "@/lib/types";
+import type { BadgeTone } from "@/components/Badge";
+import type { PlacementEventOut, PlacementRecordOut } from "@/lib/types";
+
+/** PlacementStatus (placeinator/db/enums.py) is four flat outcomes, not a
+ * progression -- "shortlisted"/"rejected" are terminal, "pending" and
+ * "unknown" aren't. Maps each to the semantic Badge tone it actually means,
+ * rather than every status reading as the same neutral gray. */
+function statusTone(status: string): BadgeTone {
+  switch (status) {
+    case "shortlisted":
+      return "success";
+    case "rejected":
+      return "danger";
+    case "pending":
+      return "warning";
+    default:
+      return "neutral";
+  }
+}
 
 export function Placement() {
   const { data: status } = useQuery({
@@ -76,7 +96,7 @@ function SyncControl() {
       {sync.isError && (
         <ErrorText onDismiss={() => sync.reset()}>
           {sync.error instanceof GmailNotConnectedError
-            ? "Gmail connection was lost -- reconnect it from Settings."
+            ? "Gmail connection was lost. Reconnect it from Settings."
             : (sync.error as Error).message}
         </ErrorText>
       )}
@@ -110,7 +130,7 @@ function ReviewQueue() {
       eyebrow="Needs review"
       eyebrowColor="var(--danger)"
       title="Unconfirmed matches"
-      description="Below the auto-accept confidence -- confirm or reject each one."
+      description="Below the auto-accept confidence. Confirm or reject each one."
     >
       <ul className="space-y-3">
         {queue.map((record) => (
@@ -120,14 +140,10 @@ function ReviewQueue() {
             style={{ borderColor: "var(--border)" }}
           >
             <div>
-              <p className="text-sm font-medium">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <GroupsIcon width={14} height={14} style={{ color: "var(--section-placement)" }} />
                 {record.company ?? "Unknown company"}
-                <span
-                  className="ml-2 rounded-[var(--radius-pill)] px-2 py-0.5 text-xs"
-                  style={{ background: "var(--canvas-inset)", color: "var(--fg-subtle)" }}
-                >
-                  {record.status}
-                </span>
+                <Badge tone={statusTone(record.status)}>{record.status}</Badge>
               </p>
               <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
                 {record.source_document} · {Math.round(record.match_confidence * 100)}% confidence
@@ -188,30 +204,110 @@ function Timeline() {
   );
 }
 
+type EventStage = "done" | "current" | "future" | "undated";
+
+/** Chronological order among this record's own events (nulls -- no date
+ * extracted -- sort last, they're not part of the date-driven done/upcoming
+ * read anyway). */
+function sortByDate(events: PlacementEventOut[]): PlacementEventOut[] {
+  return [...events].sort((a, b) => {
+    if (!a.event_date && !b.event_date) return 0;
+    if (!a.event_date) return 1;
+    if (!b.event_date) return -1;
+    return a.event_date.localeCompare(b.event_date);
+  });
+}
+
+/** "current" is the first event today-or-later; everything before it is
+ * "done", everything after is "future". An event with no extracted date
+ * can't be placed on that axis, so it's its own state rather than a guess. */
+function stageOf(event: PlacementEventOut, firstUpcomingId: number | null): EventStage {
+  if (!event.event_date) return "undated";
+  if (event.id === firstUpcomingId) return "current";
+  const today = new Date().toISOString().slice(0, 10);
+  return event.event_date < today ? "done" : "future";
+}
+
+const STAGE_STYLE: Record<EventStage, { dot: string; text: string }> = {
+  done: { dot: "var(--success)", text: "var(--fg-muted)" },
+  current: { dot: "var(--accent)", text: "var(--fg)" },
+  future: { dot: "var(--canvas)", text: "var(--fg-muted)" },
+  undated: { dot: "var(--canvas)", text: "var(--fg-subtle)" },
+};
+
+/** A real stepper over this record's own dated events -- there is no fixed
+ * "Application -> Shortlisted -> ... -> Offer" sequence in the data model
+ * (PlacementStatus is four flat outcomes, not stages; placeinator/db/enums.py),
+ * so the honest progression to visualize is each record's actual events in
+ * date order, not an invented stage list. */
 function TimelineRecords({ records }: { records: PlacementRecordOut[] }) {
   return (
-    <ul className="space-y-3">
-      {records.map((record) => (
-        <li key={record.id} className="border-l-2 pl-3" style={{ borderColor: "var(--border-strong)" }}>
-          <p className="text-sm font-medium">
-            {record.status}
-            {record.needs_review && (
-              <span className="ml-2 text-xs" style={{ color: "var(--danger)" }}>
-                needs review
-              </span>
-            )}
-          </p>
-          {record.events.map((event) => (
-            <p key={event.id} className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
-              {event.event_type.replace("_", " ")}
-              {event.event_date && ` · ${event.event_date}`}
-              {event.start_time && ` at ${event.start_time}`}
-              {event.venue && ` · ${event.venue}`}
-              {event.calendar_event_id && " · on calendar"}
+    <ul className="space-y-5">
+      {records.map((record) => {
+        const events = sortByDate(record.events);
+        const today = new Date().toISOString().slice(0, 10);
+        const firstUpcoming = events.find((e) => e.event_date && e.event_date >= today);
+        return (
+          <li key={record.id}>
+            <p className="flex items-center text-sm font-medium">
+              {record.status}
+              {record.needs_review && (
+                <span className="ml-2 text-xs" style={{ color: "var(--danger)" }}>
+                  needs review
+                </span>
+              )}
             </p>
-          ))}
-        </li>
-      ))}
+            {events.length === 0 ? (
+              <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
+                No dated events yet.
+              </p>
+            ) : (
+              <ol className="mt-2">
+                {events.map((event, i) => {
+                  const stage = stageOf(event, firstUpcoming?.id ?? null);
+                  const style = STAGE_STYLE[stage];
+                  const isLast = i === events.length - 1;
+                  return (
+                    <li key={event.id} className="relative flex gap-3 pb-4 last:pb-0">
+                      {!isLast && (
+                        <span
+                          className="absolute top-3 left-[5px] w-px"
+                          style={{ height: "calc(100% - 0.5rem)", background: "var(--border)" }}
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span
+                        className="relative z-10 mt-1 h-2.5 w-2.5 shrink-0 rounded-full border-2"
+                        style={{
+                          background: stage === "done" || stage === "current" ? style.dot : "var(--canvas)",
+                          borderColor: stage === "future" || stage === "undated" ? "var(--border-strong)" : style.dot,
+                        }}
+                        aria-hidden="true"
+                      />
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: style.text }}>
+                          {event.event_type.replace("_", " ")}
+                          {stage === "current" && (
+                            <span className="ml-2 text-xs font-normal" style={{ color: "var(--accent)" }}>
+                              next
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-xs" style={{ color: "var(--fg-subtle)" }}>
+                          {event.event_date ?? "date unknown"}
+                          {event.start_time && ` at ${event.start_time}`}
+                          {event.venue && ` · ${event.venue}`}
+                          {event.calendar_event_id && " · on calendar"}
+                        </p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

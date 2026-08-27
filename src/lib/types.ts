@@ -54,6 +54,7 @@ export interface ProfileIn {
   college: string | null;
   department: string | null;
   student_id: string | null;
+  neo_id: string | null;
   name_aliases: string[];
   preferences: PreferencesIn;
 }

@@ -72,6 +72,26 @@ def test_student_id_match_alone_needs_review():
     assert match.needs_review is True
 
 
+def test_neo_id_match_alone_needs_review():
+    match = identify_candidate({"neo_id": "22053456"}, _profile(neo_id="22053456"))
+    assert match is not None
+    assert match.needs_review is True
+    assert match.matched_on == ("neo_id",)
+
+
+def test_neo_id_and_student_id_together_auto_accept():
+    """Two independent exact-identifier signals corroborating each other --
+    same shape as email+name, just both from the strong-identifier class."""
+    match = identify_candidate(
+        {"student_id": "CS2024001", "neo_id": "22053456"},
+        _profile(neo_id="22053456"),
+    )
+    assert match is not None
+    assert match.confidence >= AUTO_ACCEPT_CONFIDENCE
+    assert match.needs_review is False
+    assert set(match.matched_on) == {"student_id", "neo_id"}
+
+
 def test_no_recognizable_signal_is_not_a_match():
     assert identify_candidate({}, _profile()) is None
 
@@ -103,6 +123,11 @@ def test_mentions_candidate_in_text_matches_on_email_alone():
 def test_mentions_candidate_in_text_matches_on_student_id_alone():
     text = "roll number CS2024001 has been shortlisted"
     assert mentions_candidate_in_text(text, _profile()) is True
+
+
+def test_mentions_candidate_in_text_matches_on_neo_id_alone():
+    text = "neo id 22053456 has been shortlisted"
+    assert mentions_candidate_in_text(text, _profile(neo_id="22053456")) is True
 
 
 def test_mentions_candidate_in_text_matches_a_name_alias():

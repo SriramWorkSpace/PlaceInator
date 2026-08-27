@@ -10,9 +10,11 @@ import {
 } from "@/components/icons";
 import { Button, ErrorText } from "@/components/Form";
 import { Page, SectionCard } from "@/components/Page";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
   connectGmail,
+  deleteAccount,
   disconnectGmail,
   getPlacementStatus,
   getProfile,
@@ -154,6 +156,7 @@ function NotificationsSection() {
         college: data.college,
         department: data.department,
         student_id: data.student_id,
+        neo_id: data.neo_id,
         name_aliases: data.name_aliases,
         preferences: { ...(data.preferences ?? DEFAULT_PREFERENCES), notification_threshold: value },
       };
@@ -180,17 +183,17 @@ function NotificationsSection() {
             </span>{" "}
             match.
           </p>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={Math.round(active * 100)}
-            disabled={!data}
-            onChange={(e) => scheduleSave(Number(e.target.value) / 100)}
-            className="mt-3 w-full"
-            style={{ accentColor: "var(--accent)" }}
-          />
+          <div className="mt-3">
+            <Slider
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(active * 100)}
+              disabled={!data}
+              onValueChange={(value) => scheduleSave(value / 100)}
+              aria-label="Minimum match score for notifications"
+            />
+          </div>
           <p className="mt-1 text-xs" style={{ color: "var(--fg-subtle)" }}>
             {mutation.isPending ? "Saving…" : " "}
           </p>
@@ -301,6 +304,97 @@ function AccountSection() {
           )}
         </div>
       </div>
+      <div className="mt-5 border-t pt-5" style={{ borderColor: "var(--border)" }}>
+        <DeleteAccountControl />
+      </div>
     </SectionCard>
+  );
+}
+
+/**
+ * Two clicks to actually delete, on purpose -- the first reveals what it
+ * does and asks the user to confirm; only the second one calls the API.
+ * No modal (this app has none anywhere else -- ErrorText/inline-expansion is
+ * the established pattern, see Field's own hint text and every route's
+ * inline error states), just an inline warning panel that replaces the
+ * button until the user commits or backs out.
+ */
+function DeleteAccountControl() {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: async () => {
+      // Three things were tried, in order, each looking reasonable and each
+      // failing in a different way -- caught by actually running this
+      // against a real sidecar every time, the same way the earlier
+      // Onboarding.tsx cache-timing bug was caught, not by reasoning about
+      // React Query in the abstract:
+      //
+      // 1. queryClient.clear() empties the cache but doesn't reliably force
+      //    App.tsx's still-mounted ["profile"] query to refetch.
+      // 2. queryClient.invalidateQueries() *does* trigger a refetch, and the
+      //    refetch *does* correctly 404 (confirmed via direct API check) --
+      //    but React Query keeps a query's last-successful `data` around
+      //    across a failed refetch by default. App.tsx's gate is
+      //    `!data && error instanceof NotOnboardedError`; with `data` still
+      //    holding the now-deleted profile, that check stayed false forever.
+      // 3. removeQueries() + invalidateQueries() together raced each other:
+      //    removeQueries on an active query already triggers its own
+      //    refetch, and the second invalidateQueries's refetch for the same
+      //    key aborted it (net::ERR_ABORTED, confirmed via network capture)
+      //    with nothing to replace it -- the query was left with no data
+      //    and no error at all, stuck.
+      //
+      // resetQueries() is the one built for exactly this: clears data AND
+      // error back to a pristine state and triggers exactly one refetch for
+      // the active observer, no race with a second call.
+      await queryClient.resetQueries({ queryKey: ["profile"] });
+    },
+  });
+
+  if (!confirming) {
+    return (
+      <Button variant="secondary" onClick={() => setConfirming(true)}>
+        Delete account
+      </Button>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-[var(--radius-input)] border p-4"
+      style={{ borderColor: "var(--danger)", background: "color-mix(in srgb, var(--danger) 8%, transparent)" }}
+    >
+      <p className="text-sm font-medium" style={{ color: "var(--danger)" }}>
+        This permanently deletes everything
+      </p>
+      <p className="mt-1 text-xs" style={{ color: "var(--fg-muted)" }}>
+        Your profile, every resume, every job, all matches, tailored resumes, outreach drafts, and
+        placement history: gone, and Google gets disconnected. This can't be undone. You'll land
+        back on the welcome screen, same as a fresh install.
+      </p>
+
+      {mutation.isError && (
+        <div className="mt-3">
+          <ErrorText onDismiss={() => mutation.reset()}>{(mutation.error as Error).message}</ErrorText>
+        </div>
+      )}
+
+      <div className="mt-3 flex gap-3">
+        <Button variant="secondary" className="flex-1" onClick={() => setConfirming(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant="danger"
+          className="flex-1"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate()}
+        >
+          {mutation.isPending ? "Deleting…" : "Yes, delete everything"}
+        </Button>
+      </div>
+    </div>
   );
 }

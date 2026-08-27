@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { Button, ErrorText, Field, Select, TextArea } from "@/components/Form";
+import { CheckIcon, CloseIcon } from "@/components/icons";
 import { EmptyState, Page } from "@/components/Page";
 import { listJobs, listResumes, tailorResume, tailorResumeAsPdf } from "@/lib/api";
 import type { BulletOut, SectionOut, TailorIn, TailorOut } from "@/lib/types";
@@ -242,21 +243,46 @@ function RequirementCoverage({
   matched: string[];
   missing: string[];
 }) {
+  const total = matched.length + missing.length;
+  const coveragePercent = total === 0 ? 0 : Math.round((matched.length / total) * 100);
+
   return (
     <div
       className="card rounded-[var(--radius-panel)] border p-5"
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
-      <p className="text-sm font-medium">{jobLabel}</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">{jobLabel}</p>
+        {total > 0 && (
+          <span className="text-xs font-semibold" style={{ color: "var(--section-tailor)" }}>
+            {coveragePercent}% covered
+          </span>
+        )}
+      </div>
+      {total > 0 && (
+        <div
+          className="mt-2.5 h-1.5 overflow-hidden rounded-full"
+          style={{ background: "var(--canvas-inset)" }}
+          role="img"
+          aria-label={`${coveragePercent}% of requirements covered`}
+        >
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${coveragePercent}%`, background: "var(--section-tailor)" }}
+          />
+        </div>
+      )}
       <div className="mt-3 space-y-2">
         {matched.map((id) => (
-          <p key={id} className="text-xs" style={{ color: "var(--success)" }}>
-            ✓ {id}
+          <p key={id} className="flex items-center gap-1.5 text-xs" style={{ color: "var(--success)" }}>
+            <CheckIcon width={13} height={13} />
+            {id}
           </p>
         ))}
         {missing.map((id) => (
-          <p key={id} className="text-xs" style={{ color: "var(--fg-subtle)" }}>
-            ✗ {id}
+          <p key={id} className="flex items-center gap-1.5 text-xs" style={{ color: "var(--fg-subtle)" }}>
+            <CloseIcon width={13} height={13} />
+            {id}
           </p>
         ))}
         {missing.length > 0 && (
@@ -290,8 +316,12 @@ function ChangeLog({
             <p className="text-xs font-medium">
               {section.heading}
               {section.original_index !== section.new_index && (
-                <span className="ml-1.5" style={{ color: "var(--success)" }}>
-                  ✓ moved
+                <span
+                  className="ml-1.5 inline-flex items-center gap-1"
+                  style={{ color: "var(--success)" }}
+                >
+                  <CheckIcon width={11} height={11} />
+                  moved
                 </span>
               )}
             </p>

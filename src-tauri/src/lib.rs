@@ -272,6 +272,8 @@ pub fn run() {
             WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("PlaceInator")
                 .inner_size(1280.0, 800.0)
+                .min_inner_size(960.0, 600.0)
+                .decorations(false)
                 .initialization_script(&init_script)
                 .build()?;
 

@@ -24,11 +24,16 @@ from rapidfuzz import fuzz
 from placeinator.db.models import Profile
 from placeinator.placement.headers import CanonicalField
 
-# Per-signal contribution. Email and student ID are exact-match-or-nothing;
-# a name match is scaled by its own fuzzy similarity, so a marginal name
-# match contributes less than a near-exact one.
+# Per-signal contribution. Email, student ID, and Neo ID are all
+# exact-match-or-nothing; a name match is scaled by its own fuzzy
+# similarity, so a marginal name match contributes less than a near-exact
+# one. Neo ID is weighted the same as student_id -- both are the same class
+# of strong, exact campus-portal identifier (see placeinator.db.models.
+# Profile.neo_id), just from different systems some colleges use alongside
+# each other.
 _EMAIL_WEIGHT = 0.45
 _STUDENT_ID_WEIGHT = 0.35
+_NEO_ID_WEIGHT = 0.35
 _NAME_WEIGHT = 0.35
 
 # A fuzzy name match below this similarity doesn't count at all -- distinct
@@ -86,6 +91,12 @@ def identify_candidate(row: dict[CanonicalField, str], profile: Profile) -> Cand
         score += _STUDENT_ID_WEIGHT
         matched_on.append("student_id")
 
+    row_neo_id = row.get("neo_id", "").strip().lower()
+    profile_neo_id = (profile.neo_id or "").strip().lower()
+    if row_neo_id and profile_neo_id and row_neo_id == profile_neo_id:
+        score += _NEO_ID_WEIGHT
+        matched_on.append("neo_id")
+
     row_candidate = row.get("candidate", "")
     if row_candidate:
         candidate_names = [profile.full_name, *profile.name_aliases]
@@ -125,6 +136,8 @@ def mentions_candidate_in_text(text: str, profile: Profile) -> bool:
     if profile.email and profile.email.strip().lower() in haystack:
         return True
     if profile.student_id and profile.student_id.strip().lower() in haystack:
+        return True
+    if profile.neo_id and profile.neo_id.strip().lower() in haystack:
         return True
 
     candidate_names = [profile.full_name, *profile.name_aliases]

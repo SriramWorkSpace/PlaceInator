@@ -2,12 +2,15 @@ import { lazy, Suspense, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { Badge } from "@/components/Badge";
 import { Button, ErrorText, Field, Select, TextArea, TextInput } from "@/components/Form";
+import { LinkIcon, SearchIcon } from "@/components/icons";
 import { EmptyState, Page } from "@/components/Page";
 import { Table, TableCell, TableHead, TableRow } from "@/components/Table";
 import {
   createManualJob,
   extractJobFromFile,
+  extractJobFromText,
   listJobs,
   listRankedJobs,
   NotOnboardedError,
@@ -80,6 +83,32 @@ function invalidateJobLists(queryClient: ReturnType<typeof useQueryClient>) {
 }
 
 /**
+ * The three job-intake boxes (board search, ATS sync, manual paste) used to
+ * be visually identical -- same border/background/padding, no way to tell
+ * "search a board" from "sync ATS" from "paste manually" without reading
+ * the form fields inside. A small icon + label header differentiates each
+ * one at a glance, the same "eyebrow + icon badge" anatomy StatTile and the
+ * sidebar nav already use.
+ */
+function BoxHeader({ icon: Icon, label }: { icon?: typeof SearchIcon; label: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      {Icon && (
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+          style={{ background: "color-mix(in srgb, var(--section-jobs) 20%, transparent)" }}
+        >
+          <Icon width={14} height={14} style={{ color: "var(--section-jobs)" }} />
+        </span>
+      )}
+      <span className="eyebrow" style={{ color: "var(--section-jobs)" }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/**
  * Pulls every open posting from a company's public ATS board.
  *
  * Kept separate from the keyword search above because it is a different kind
@@ -103,11 +132,12 @@ function AtsFeedSync() {
 
   return (
     <div
-      className="card mt-6 rounded-[var(--radius-panel)] border p-6"
+      className="card-hover mt-6 rounded-[var(--radius-panel)] border p-6"
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
+      <BoxHeader icon={LinkIcon} label="Sync a company's ATS board" />
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="mt-4 flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           sync.mutate({ companies: [`${platform}:${slug.trim()}`] });
@@ -193,11 +223,12 @@ function JobBoardSearch() {
 
   return (
     <div
-      className="card rounded-[var(--radius-panel)] border p-6"
+      className="card-hover rounded-[var(--radius-panel)] border p-6"
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
+      <BoxHeader icon={SearchIcon} label="Search a job board" />
       <form
-        className="flex flex-wrap items-end gap-3"
+        className="mt-4 flex flex-wrap items-end gap-3"
         onSubmit={(e) => {
           e.preventDefault();
           search.mutate({ source, keywords, location: location || undefined });
@@ -286,12 +317,29 @@ export function Jobs() {
     },
   });
 
+  // Same autofill as extractJd above, but for text pasted directly into the
+  // "Job description" textarea (the page's own description leads with
+  // "paste a job description" as the first option -- it needs the same
+  // autofill the file-upload path already gets, not just a place to type).
+  // Triggered automatically from the textarea's onPaste, below.
+  const extractJdFromText = useMutation({
+    mutationFn: extractJobFromText,
+    onSuccess: (fields) => {
+      setForm((f) => ({
+        ...f,
+        designation: f.designation || fields.designation || "",
+        company: f.company || fields.company || "",
+      }));
+    },
+  });
+
   const addJob = useMutation({
     mutationFn: createManualJob,
     onSuccess: (job) => {
       invalidateJobLists(queryClient);
       setForm(EMPTY_JOB);
       extractJd.reset();
+      extractJdFromText.reset();
       if (jdFileInput.current) jdFileInput.current.value = "";
       setExpandedJobId(job.id);
     },
@@ -306,7 +354,7 @@ export function Jobs() {
       <AtsFeedSync />
 
       <form
-        className="card mt-6 space-y-3 rounded-[var(--radius-panel)] border p-6"
+        className="card-hover mt-6 rounded-[var(--radius-panel)] border p-6"
         style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
         onSubmit={(e) => {
           e.preventDefault();
@@ -320,8 +368,10 @@ export function Jobs() {
           });
         }}
       >
+        <BoxHeader label="Paste or upload a job description" />
+        <div className="mt-4 space-y-3">
         <div
-          className="card rounded-[var(--radius-panel)] border p-4"
+          className="card-hover rounded-[var(--radius-panel)] border p-4"
           style={{ borderColor: "var(--border)", background: "var(--canvas)" }}
         >
           <Field
@@ -408,14 +458,38 @@ export function Jobs() {
           </div>
         </div>
 
-        <Field label="Job description">
+        <Field
+          label="Job description"
+          hint="Pasting fills in company & role below automatically -- anything already typed is left alone."
+        >
           <TextArea
             required
             rows={8}
             placeholder="Paste the full job description here…"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
+            onPaste={(e) => {
+              const pasted = e.clipboardData.getData("text/plain");
+              if (pasted.trim().length > 40) {
+                extractJdFromText.mutate(pasted);
+              }
+            }}
           />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="soft"
+              disabled={!form.description.trim() || extractJdFromText.isPending}
+              onClick={() => extractJdFromText.mutate(form.description)}
+            >
+              {extractJdFromText.isPending ? "Reading…" : "Auto-fill company & role"}
+            </Button>
+            {extractJdFromText.isError && (
+              <ErrorText onDismiss={() => extractJdFromText.reset()}>
+                {(extractJdFromText.error as Error).message}
+              </ErrorText>
+            )}
+          </div>
         </Field>
 
         {addJob.isError && (
@@ -427,6 +501,7 @@ export function Jobs() {
         <Button type="submit" disabled={addJob.isPending}>
           {addJob.isPending ? "Adding…" : "Add job"}
         </Button>
+        </div>
       </form>
 
       {data && !data.ranked && (
@@ -506,21 +581,15 @@ function JobRow({
           </span>
           {/* Where this came from: a discovered posting and one the user
               pasted are otherwise indistinguishable in this list. */}
-          <span
-            className="ml-2 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
-            style={{ background: "var(--canvas)", color: "var(--fg-subtle)" }}
-          >
-            {job.source.replace("_", " ")}
+          <span className="ml-2">
+            <Badge size="tag">{job.source.replace("_", " ")}</Badge>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {showScore && !filtered && (
-            <span
-              className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-            >
+            <Badge fillPercent={Math.round(ranking.overall_score * 100)}>
               {formatPercent(ranking.overall_score)} match
-            </span>
+            </Badge>
           )}
           <span className="text-xs" style={{ color: "var(--fg-subtle)" }}>
             {job.required_skill_ids.length} required skills
@@ -596,11 +665,21 @@ function RankedResumes({ jobId }: { jobId: number }) {
         {rank.data!.map((m: MatchOut) => (
           <TableRow key={m.resume_id}>
             <TableCell>{m.resume_label}</TableCell>
-            <TableCell mono>{formatPercent(m.personalized_score)}</TableCell>
-            <TableCell mono>{formatPercent(m.explanation.skills.value)}</TableCell>
-            <TableCell mono>{formatPercent(m.explanation.projects.value)}</TableCell>
-            <TableCell mono>{formatPercent(m.explanation.experience.value)}</TableCell>
-            <TableCell mono>{formatPercent(m.explanation.role.value)}</TableCell>
+            <TableCell>
+              <ScoreCell value={m.personalized_score} emphasize />
+            </TableCell>
+            <TableCell>
+              <ScoreCell value={m.explanation.skills.value} />
+            </TableCell>
+            <TableCell>
+              <ScoreCell value={m.explanation.projects.value} />
+            </TableCell>
+            <TableCell>
+              <ScoreCell value={m.explanation.experience.value} />
+            </TableCell>
+            <TableCell>
+              <ScoreCell value={m.explanation.role.value} />
+            </TableCell>
           </TableRow>
         ))}
       </tbody>
@@ -610,6 +689,40 @@ function RankedResumes({ jobId }: { jobId: number }) {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+/** The five score columns used to be raw mono percentage text -- a wall of
+ * numbers with no visual sense of magnitude at a glance. The number stays
+ * (dataviz: never remove the value, add the visual); a thin fill bar
+ * underneath gives the same row a shape you can scan without reading every
+ * digit. `emphasize` marks the overall Match column, sized and colored to
+ * read as the headline the other four support. */
+function ScoreCell({ value, emphasize = false }: { value: number; emphasize?: boolean }) {
+  const percent = Math.round(value * 100);
+  return (
+    <div className="min-w-16">
+      <span
+        className={emphasize ? "text-sm font-semibold" : "text-xs"}
+        style={{ color: emphasize ? "var(--fg)" : "var(--fg-muted)" }}
+      >
+        {percent}%
+      </span>
+      <div
+        className="mt-1 h-1 overflow-hidden rounded-full"
+        style={{ background: "var(--canvas-inset)" }}
+        role="img"
+        aria-label={`${percent}%`}
+      >
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${percent}%`,
+            background: emphasize ? "var(--accent)" : "var(--section-jobs)",
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 /** Matches DatePickerField's real label+control markup exactly (reusing the

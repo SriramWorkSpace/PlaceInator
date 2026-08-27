@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/Form";
+import { GroupsIcon, HomeIcon, ResumeDocIcon, SearchIcon } from "@/components/icons";
 import { EmptyState, Page, SectionCard } from "@/components/Page";
 import {
   getStatus,
   listJobNotifications,
+  listJobs,
+  listResumes,
   markNotificationSeen,
   NotOnboardedError,
   SidecarUnavailableError,
@@ -22,9 +25,12 @@ export function Dashboard() {
   return (
     <Page
       title="Studio Overview"
-      description="Your placement activity at a glance -- profile, resumes, jobs, and the local engine that ties them together."
+      description="Your placement activity at a glance: profile, resumes, jobs, and the local engine that ties them together."
     >
-      <SidecarStatus />
+      <KpiRow notificationCount={notifications?.length ?? 0} />
+      <div className="mt-6">
+        <SidecarStatus />
+      </div>
       <div className="mt-6">
         {hasNotifications ? (
           <Notifications notifications={notifications} />
@@ -38,6 +44,78 @@ export function Dashboard() {
         )}
       </div>
     </Page>
+  );
+}
+
+/**
+ * "At a glance" per this page's own description, but until now it showed
+ * zero numbers -- everything numeric (resume count, job count, new matches)
+ * was either absent or buried a click away. Three stat tiles, each backed by
+ * a query this app already has (listResumes/listJobs are plain GETs, no new
+ * endpoint), each tinted with its own section's own nav color so a tile
+ * reads as "the Resumes number" / "the Jobs number" at a glance -- the same
+ * per-section-color convention src/lib/nav.ts already drives everywhere else.
+ */
+function KpiRow({ notificationCount }: { notificationCount: number }) {
+  const { data: resumes } = useQuery({ queryKey: ["resumes"], queryFn: listResumes });
+  const { data: jobs } = useQuery({ queryKey: ["jobs"], queryFn: listJobs });
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      <StatTile
+        icon={ResumeDocIcon}
+        color="var(--section-resumes)"
+        label="Resumes"
+        value={resumes?.length}
+      />
+      <StatTile icon={SearchIcon} color="var(--section-jobs)" label="Jobs tracked" value={jobs?.length} />
+      <StatTile
+        icon={GroupsIcon}
+        color="var(--section-outreach)"
+        label="New matches"
+        value={notificationCount}
+      />
+    </div>
+  );
+}
+
+function StatTile({
+  icon: Icon,
+  color,
+  label,
+  value,
+}: {
+  icon: typeof HomeIcon;
+  color: string;
+  label: string;
+  value: number | undefined;
+}) {
+  return (
+    <div
+      className="card rounded-[var(--radius-panel)] border p-5"
+      style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{ background: `color-mix(in srgb, ${color} 20%, transparent)` }}
+        >
+          <Icon width={16} height={16} style={{ color }} />
+        </span>
+        <span className="eyebrow" style={{ color }}>
+          {label}
+        </span>
+      </div>
+      <p className="display-heading mt-3 text-4xl" aria-live="polite">
+        {value === undefined ? (
+          <span aria-hidden="true" style={{ color: "var(--fg-subtle)" }}>
+            &ndash;
+          </span>
+        ) : (
+          value
+        )}
+      </p>
+    </div>
   );
 }
 

@@ -135,6 +135,12 @@ export async function getProfile(): Promise<ProfileOut> {
 export const putProfile = (data: ProfileIn) =>
   apiFetch<ProfileOut>("/api/profile", { method: "PUT", body: JSON.stringify(data) });
 
+/** Full local reset (Settings' "Delete account"): wipes the profile and
+ * everything else in this single-user app, back to a genuinely first-run
+ * state. Irreversible -- the UI gates this behind its own confirmation, not
+ * just a single click. */
+export const deleteAccount = () => apiFetch<void>("/api/profile", { method: "DELETE" });
+
 // -- Resumes -------------------------------------------------------------
 
 export const listResumes = () => apiFetch<ResumeOut[]>("/api/resumes");
@@ -234,6 +240,15 @@ export function extractJobFromFile(params: {
   form.set("file", params.file);
   return apiFetch<ExtractedJobFields>("/api/jobs/extract", { method: "POST", body: form });
 }
+
+/** Same extraction as extractJobFromFile, but for a job description pasted
+ * directly into the manual-add form's textarea rather than uploaded as a
+ * file -- writes nothing. */
+export const extractJobFromText = (description: string) =>
+  apiFetch<ExtractedJobFields>("/api/jobs/extract-text", {
+    method: "POST",
+    body: JSON.stringify({ description }),
+  });
 
 // -- Matching --------------------------------------------------------------
 

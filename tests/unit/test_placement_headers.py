@@ -29,6 +29,16 @@ def test_a_close_typo_is_still_recognized_via_rapidfuzz():
     assert classify_header("Studnt Name") == "candidate"
 
 
+def test_registration_number_variants_map_to_student_id():
+    assert classify_header("Registration Number") == "student_id"
+    assert classify_header("Roll No") == "student_id"
+
+
+def test_neo_id_variants_map_to_the_neo_id_field():
+    assert classify_header("Neo ID") == "neo_id"
+    assert classify_header("NeoID") == "neo_id"
+
+
 def test_an_unrelated_header_is_left_unrecognized():
     """Below the fuzzy-match threshold -- must not be guessed into some
     canonical field just because it's the "closest" available option."""

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Badge } from "@/components/Badge";
 import { Button, ErrorText, Field, Select } from "@/components/Form";
+import { GroupsIcon } from "@/components/icons";
 import { EmptyState, Page, SectionCard } from "@/components/Page";
 import {
   createOutreachDraft,
@@ -42,7 +44,7 @@ export function Outreach() {
       <Page title="Cold Outreach" description="Personalized cold-mail drafts.">
         <EmptyState
           title="Complete your profile first"
-          hint="Targets are drawn from your ranked jobs -- onboard and add at least one job first."
+          hint="Targets are drawn from your ranked jobs. Onboard and add at least one job first."
         />
       </Page>
     );
@@ -83,7 +85,7 @@ export function Outreach() {
         <div className="mt-6">
           <EmptyState
             title="No targets yet"
-            hint="Add and rank some jobs first -- targets are your best-matched, non-excluded opportunities."
+            hint="Add and rank some jobs first. Targets are your best-matched, non-excluded opportunities."
           />
         </div>
       )}
@@ -130,20 +132,20 @@ function TargetRow({
       style={{ borderColor: "var(--border)", background: "var(--canvas-subtle)" }}
     >
       <div className="flex items-center justify-between gap-4 px-4 py-3">
-        <span>
-          <span className="text-sm font-medium">{target.job.designation}</span>
-          <span className="ml-2 text-sm" style={{ color: "var(--fg-muted)" }}>
-            {target.job.company}
-            {target.job.location ? ` · ${target.job.location}` : ""}
+        <span className="flex items-center gap-2">
+          <GroupsIcon width={14} height={14} style={{ color: "var(--section-outreach)" }} />
+          <span>
+            <span className="text-sm font-medium">{target.job.designation}</span>
+            <span className="ml-2 text-sm" style={{ color: "var(--fg-muted)" }}>
+              {target.job.company}
+              {target.job.location ? ` · ${target.job.location}` : ""}
+            </span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          <span
-            className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
-            style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-          >
+          <Badge fillPercent={Math.round(target.overall_score * 100)}>
             {Math.round(target.overall_score * 100)}% match
-          </span>
+          </Badge>
           {existingDraft ? (
             <Button variant="secondary" onClick={() => setExpanded((v) => !v)}>
               {expanded ? "Hide draft" : "View draft"}

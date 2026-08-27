@@ -281,6 +281,23 @@ async def test_extract_job_from_file_needs_no_profile(client):
     assert "Python" in body["description"]
 
 
+async def test_extract_job_from_text_needs_no_profile(client):
+    """Same autofill as the file-upload path, but for text pasted directly
+    into the manual-add form's textarea -- must not require onboarding."""
+    response = await client.post(
+        "/api/jobs/extract-text",
+        json={
+            "description": "Backend Engineer\n\nCompany: Acme Corp\n\n"
+            "Requirements\n- Strong experience with Python"
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["designation"] == "Backend Engineer"
+    assert body["company"] == "Acme Corp"
+    assert "Python" in body["description"]
+
+
 async def test_ranked_jobs_hard_filters_and_refilters_on_preference_change(client):
     """The relocation hard constraint is the one spec §2 rule exercisable
     through the manual-add form as it stands today (ManualJobIn has no

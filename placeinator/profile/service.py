@@ -10,11 +10,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from placeinator.db.models import Preferences, Profile
+from placeinator.db.models import Job, PlacementRecord, Preferences, Profile
 from placeinator.jobs.service import refilter_jobs
+from placeinator.placement import auth as gmail_auth
 from placeinator.profile.schemas import PreferencesIn, ProfileIn
 
 
@@ -39,6 +40,7 @@ def upsert_profile(session: Session, data: ProfileIn) -> Profile:
     profile.college = data.college
     profile.department = data.department
     profile.student_id = data.student_id
+    profile.neo_id = data.neo_id
     profile.name_aliases = data.name_aliases
 
     if is_first_time:
@@ -49,6 +51,34 @@ def upsert_profile(session: Session, data: ProfileIn) -> Profile:
 
     session.flush()
     return profile
+
+
+def reset_all_data(session: Session) -> None:
+    """Full local reset -- wipes the profile and everything else in this
+    single-user app, back to a genuinely first-run state (spec/ADR: exactly
+    one Profile row, ever; this is what makes "delete account" mean "start
+    over" rather than needing per-table user-scoping this schema doesn't
+    have).
+
+    SQLite's own ON DELETE CASCADE (PRAGMA foreign_keys=ON, see
+    placeinator.db.session) does the real work once the two anchors are
+    gone: deleting Profile cascades Preferences/Resume, and Resume itself
+    cascades ResumeChunk/MatchResult/TailoredResume/OutreachDraft; deleting
+    Job cascades JobRequirement and the same MatchResult/TailoredResume/
+    OutreachDraft rows from the other side. PlacementRecord is the one table
+    with no such anchor -- identified by gmail_message_id, not owned by
+    Profile or Job -- so it's deleted explicitly; PlacementEvent cascades
+    from that via its own ORM relationship (cascade="all, delete-orphan").
+
+    Also disconnects Gmail: leaving a stale OS-keychain credential behind
+    after "deleting the account" would mean the next fresh onboarding starts
+    already connected to a Google account nobody asked to connect here.
+    """
+    session.execute(delete(Job))
+    session.execute(delete(PlacementRecord))
+    session.execute(delete(Profile))
+    session.flush()
+    gmail_auth.disconnect()
 
 
 def _upsert_preferences(session: Session, profile: Profile, data: PreferencesIn) -> Preferences:

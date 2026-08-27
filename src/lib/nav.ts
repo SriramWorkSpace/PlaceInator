@@ -6,6 +6,7 @@ import {
   GroupsIcon,
   HomeIcon,
   PersonIcon,
+  PlacementIcon,
   ResumeDocIcon,
   SearchIcon,
   SettingsIcon,
@@ -28,7 +29,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/tailor", label: "Tailor", icon: CheckIcon, color: "--section-tailor" },
   { path: "/career", label: "Career", icon: BookIcon, color: "--section-career" },
   { path: "/outreach", label: "Outreach", icon: GroupsIcon, color: "--section-outreach" },
-  { path: "/placement", label: "Placement", icon: GroupsIcon, color: "--section-placement" },
+  { path: "/placement", label: "Placement", icon: PlacementIcon, color: "--section-placement" },
 ];
 
 export const PROFILE_ITEM: NavItem = {

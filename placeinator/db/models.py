@@ -51,6 +51,13 @@ class Profile(Base, TimestampMixin):
     college: Mapped[str | None] = mapped_column(String(200))
     department: Mapped[str | None] = mapped_column(String(200))
     student_id: Mapped[str | None] = mapped_column(String(64))
+    # A second campus-portal identifier some colleges use alongside (not
+    # instead of) a registration/roll number -- e.g. KIIT's "Neo ID". Kept as
+    # its own column rather than folded into student_id: a placement sheet
+    # can carry either, both, or neither, and student_id already has its own
+    # header-synonym set (see placeinator.placement.headers) that would
+    # otherwise conflate the two.
+    neo_id: Mapped[str | None] = mapped_column(String(64))
 
     # Alternate spellings used for candidate identification in placement sheets,
     # where the same person appears as "S. Madala", "Sriram M", and so on.

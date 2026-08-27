@@ -48,6 +48,7 @@ class ProfileIn(BaseModel):
     college: str | None = None
     department: str | None = None
     student_id: str | None = None
+    neo_id: str | None = None
     name_aliases: list[str] = Field(default_factory=list)
     preferences: PreferencesIn = Field(default_factory=PreferencesIn)
 
@@ -60,6 +61,7 @@ class ProfileOut(BaseModel):
     college: str | None
     department: str | None
     student_id: str | None
+    neo_id: str | None
     name_aliases: list[str]
     onboarded: bool
     preferences: PreferencesOut | None

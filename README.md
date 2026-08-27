@@ -67,6 +67,21 @@ LinkedIn/Naukri coverage will stay thin even once built). The sidecar prints exa
 line to stdout on startup — `PLACEINATOR_READY {"port": 51234, "token": "..."}` — and
 logs everything else to stderr, so that channel never carries anything but the handshake.
 
+## Install
+
+Prebuilt Windows installers — no Python, Node, or Rust toolchain needed on the
+target machine. Either format works; pick one.
+
+| Installer | Path (after [packaging](#packaging)) | Notes |
+|---|---|---|
+| MSI | `src-tauri/target/release/bundle/msi/PlaceInator_<version>_x64_en-US.msi` | Standard Windows Installer package. Double-click to run, or install silently with `msiexec /i PlaceInator_<version>_x64_en-US.msi /qn`. |
+| NSIS | `src-tauri/target/release/bundle/nsis/PlaceInator_<version>_x64-setup.exe` | Self-contained setup wizard; double-click and follow the prompts. |
+
+Both install per-user (no admin rights required), add a Start Menu shortcut,
+and register a standard Windows uninstaller. All app data — the SQLite
+database, the cached embedding model, the downloaded Tectonic PDF compiler —
+lives in a per-user AppData folder; nothing is written system-wide.
+
 ## Documentation
 
 | Document | What it covers |
@@ -118,6 +133,23 @@ VITE_SIDECAR_PORT=<port> VITE_SIDECAR_TOKEN=<token> npm run dev
 
 Once Rust is installed, `npm run tauri dev` launches both together.
 
+## Packaging
+
+Building the distributable installers freezes the sidecar first, then bundles
+it into the Tauri shell:
+
+```bash
+cd packaging
+../.venv/Scripts/python.exe -m PyInstaller placeinator_backend.spec --noconfirm
+cd ..
+npm run build
+npx tauri build
+```
+
+Outputs land in `src-tauri/target/release/bundle/msi/` and
+`src-tauri/target/release/bundle/nsis/` — see [Install](#install) above for
+what to do with them.
+
 ## Checks
 
 ```bash
@@ -137,7 +169,7 @@ placeinator/      Python sidecar — flat feature packages, one per spec section
   skills/         taxonomy — the semantic backbone, since there is no LLM
 migrations/       Alembic; the only thing that creates or alters schema
 src/              React frontend (routes/, components/, lib/, styles/)
-src-tauri/        Rust shell — dev-mode sidecar supervision working; PyInstaller bundling not yet wired
+src-tauri/        Rust shell — sidecar supervision, window/tray, and packaging (PyInstaller + MSI/NSIS via `tauri build`)
 tests/            unit/ (in-process) · integration/ (real I/O) · fixtures/ (golden files)
 docs/             specification, architecture, roadmap, changelog, decisions
 ```

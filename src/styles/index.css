@@ -321,32 +321,64 @@ textarea,
 }
 
 /* ------------------------------------------------------------------ *
- * Pill buttons and inputs -- "Tactile, legible, consistent": a 48px
+ * Pill buttons and inputs -- "Tactile, legible, consistent": a 48px+
  * comfort target, a visible keyboard focus ring, and press feedback that
  * respects prefers-reduced-motion.
+ *
+ * A floating-card hover: the button lifts (translateY) and its shadow
+ * grows and picks up the variant's own color as a soft glow, echoing a
+ * card coming off the page rather than a fill sweeping across it. Every
+ * color is a --btn-* custom property, set per variant (see Button in
+ * Form.tsx) from the app's own --accent/--danger tokens -- never a
+ * hardcoded hex -- so it automatically follows both the light/dark toggle
+ * and the four accent palettes (src/lib/palette.ts) with no changes
+ * needed here. --shadow-card/--shadow-card-hover are this app's own
+ * existing elevation tokens (styles/index.css, used for hoverable cards
+ * elsewhere) -- reused here rather than inventing a parallel shadow scale.
+ *
+ * --btn-bg/--btn-fg/--btn-fill/--btn-fill-fg/--btn-glow are set via inline
+ * style (custom properties), but the actual `color`/`background` are
+ * assigned here in the stylesheet rather than inline -- an inline `style`
+ * attribute would always outrank a `.btn:hover` rule's specificity, which
+ * would make the hover-fill colors below un-overridable without
+ * `!important`.
  * ------------------------------------------------------------------ */
 
 .btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 48px;
-  padding: 0 24px;
+  min-height: 48px;
+  padding: 1.15em 2.75em;
+  border: none;
   border-radius: var(--radius-pill);
-  font-size: 14px;
-  font-weight: 600;
-  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  background: var(--btn-bg, transparent);
+  color: var(--btn-fg, inherit);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
   transition:
-    transform 100ms var(--ease-out),
-    opacity 150ms var(--ease-out),
-    background-color 150ms var(--ease-out);
+    transform 300ms var(--ease-out),
+    box-shadow 300ms var(--ease-out),
+    background-color 300ms var(--ease-out),
+    color 300ms var(--ease-out);
 }
 .btn:active {
-  transform: scale(0.97);
+  transform: translateY(-1px);
 }
 @media (hover: hover) and (pointer: fine) {
   .btn:hover {
-    opacity: 0.9;
+    background: var(--btn-fill, var(--btn-bg));
+    color: var(--btn-fill-fg, var(--btn-fg));
+    box-shadow: var(--shadow-card-hover), 0 14px 24px -8px var(--btn-glow, transparent);
+    transform: translateY(-4px);
+  }
+  .btn:hover:active {
+    transform: translateY(-1px);
   }
 }
 .btn:focus-visible {
@@ -363,6 +395,13 @@ textarea,
       opacity 150ms ease,
       background-color 150ms ease;
   }
+  .btn:hover {
+    background: var(--btn-bg, transparent);
+    color: var(--btn-fg, inherit);
+    box-shadow: var(--shadow-card);
+    transform: none;
+    opacity: 0.9;
+  }
   .btn:active {
     transform: none;
   }
@@ -377,6 +416,12 @@ textarea,
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--fg-subtle);
+  font-weight: 400;
+  opacity: 1;
 }
 
 /* ------------------------------------------------------------------ *

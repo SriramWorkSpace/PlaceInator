@@ -122,6 +122,10 @@ class ExtractedJobOut(BaseModel):
     description: str
 
 
+class ExtractTextIn(BaseModel):
+    description: str = Field(min_length=1)
+
+
 @router.get("", response_model=list[JobOut])
 def read_jobs(session: Session = Depends(get_session)) -> list[JobOut]:
     return [_to_out(j) for j in list_jobs(session)]
@@ -180,6 +184,17 @@ async def extract_job_from_file(
 
     fields = extract_job_fields(text)
     return ExtractedJobOut(designation=fields.designation, company=fields.company, description=text)
+
+
+@router.post("/extract-text", response_model=ExtractedJobOut)
+def extract_job_from_text(data: ExtractTextIn) -> ExtractedJobOut:
+    """Same heuristic extraction as POST /extract, but for a job description
+    the user pasted directly into the manual-add form's textarea rather than
+    uploaded as a file -- writes nothing."""
+    fields = extract_job_fields(data.description)
+    return ExtractedJobOut(
+        designation=fields.designation, company=fields.company, description=data.description
+    )
 
 
 @router.post("/manual", response_model=JobOut, status_code=status.HTTP_201_CREATED)

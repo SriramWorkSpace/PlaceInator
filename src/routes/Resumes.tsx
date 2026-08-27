@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { Badge } from "@/components/Badge";
 import { Button, ErrorText, Field, Select, TextInput } from "@/components/Form";
+import { CheckIcon, ResumeDocIcon } from "@/components/icons";
 import { EmptyState, Page } from "@/components/Page";
 import { Table, TableCell, TableHead, TableRow } from "@/components/Table";
 import { listResumes, setPrimaryResume, uploadResume } from "@/lib/api";
@@ -137,19 +139,19 @@ export function Resumes() {
             <tbody>
               {resumes.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell>{r.label}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-2">
+                      <ResumeDocIcon width={14} height={14} style={{ color: "var(--section-resumes)" }} />
+                      {r.label}
+                    </span>
+                  </TableCell>
                   <TableCell>{r.target_role ?? "—"}</TableCell>
                   <TableCell mono>{r.source_format}</TableCell>
                   <TableCell mono>v{r.version}</TableCell>
                   <TableCell mono>{r.chunk_count}</TableCell>
                   <TableCell>
                     {r.is_primary ? (
-                      <span
-                        className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-medium"
-                        style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-                      >
-                        Primary
-                      </span>
+                      <Badge icon={<CheckIcon width={12} height={12} />}>Primary</Badge>
                     ) : (
                       <button
                         type="button"
