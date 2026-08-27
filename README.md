@@ -1,5 +1,5 @@
 <h1 align="center">PlaceInator</h1>
-<p align="center">A local-first placement assistant: resume↔job matching, LaTeX resume tailoring, and Gmail→Calendar automation</p>
+<p align="center">A local-first placement assistant powered by an on-device ML matching engine: semantic resume↔job scoring, LaTeX resume tailoring, and Gmail→Calendar automation</p>
 <h4 align="center">
     <a href="#setup"><strong>Get started »</strong></a>
     <br />
@@ -16,15 +16,21 @@
     <img src="https://img.shields.io/github/commit-activity/m/SriramWorkSpace/PlaceInator" alt="commit activity" />
   </a>
   <img src="https://img.shields.io/badge/stack-Tauri%20%C2%B7%20React%20%C2%B7%20FastAPI-444" alt="Tauri, React, FastAPI" />
+  <img src="https://img.shields.io/badge/ML-fastembed%20%2F%20ONNX%20Runtime%2C%20no%20LLM-5d4a9e" alt="ML: fastembed / ONNX Runtime, no LLM" />
   <a href="https://github.com/SriramWorkSpace/PlaceInator">
     <img src="https://img.shields.io/github/followers/SriramWorkSpace?style=social" alt="Follow SriramWorkSpace" />
   </a>
 </h4>
 
-Runs entirely on the user's machine: SQLite for storage, ONNX Runtime for embeddings
-(never PyTorch — see [ADR 0005](docs/decisions.md#adr-0005--fastembed--onnx-runtime-never-pytorch)),
-no LLM anywhere in the pipeline (see [ADR 0002](docs/decisions.md#adr-0002--deterministic-engine-no-llm-generation)).
-Current build status and full milestone history in
+The matching engine everything else in the app depends on is real ML — local
+sentence embeddings scored against each other with cosine similarity, not a
+prompt to a hosted model. It runs entirely on the user's machine: ONNX Runtime
+for inference (never PyTorch — see
+[ADR 0005](docs/decisions.md#adr-0005--fastembed--onnx-runtime-never-pytorch)),
+SQLite for storage, and deliberately **no LLM anywhere in the pipeline** — see
+[ADR 0002](docs/decisions.md#adr-0002--deterministic-engine-no-llm-generation)
+for why every score is a reproducible number instead of a black box. Current
+build status and full milestone history in
 [the architecture doc](docs/architecture.md#milestone-status).
 
 ## How it works
@@ -66,6 +72,47 @@ Solid boxes and edges are built and tested; dashed ones are on the roadmap
 LinkedIn/Naukri coverage will stay thin even once built). The sidecar prints exactly one
 line to stdout on startup — `PLACEINATOR_READY {"port": 51234, "token": "..."}` — and
 logs everything else to stderr, so that channel never carries anything but the handshake.
+
+## The matching engine
+
+The ML core (`placeinator/matching/`) is deterministic and explainable by
+construction — every score is traceable back to the exact text that produced
+it, not an opaque model call.
+
+- **Model**: [`BAAI/bge-small-en-v1.5`](https://huggingface.co/BAAI/bge-small-en-v1.5)
+  via [fastembed](https://github.com/qdrant/fastembed), a 384-dimension
+  sentence-embedding model running on quantized ONNX weights (~64 MB,
+  downloaded once and cached locally) — no network call per request, no
+  PyTorch, no GPU required.
+- **Chunking**: resumes are split into typed, source-tracked chunks
+  (skills / projects / experience / summary); job descriptions into typed
+  requirement lines. Every embedding is L2-normalized float32, stamped with
+  the model name/dimension it was produced by, so a model upgrade leaves
+  stale vectors detectable instead of silently wrong.
+- **Scoring**: five independently-computed components, each in `[0, 1]`
+  and each carrying its own top-k evidence pairs:
+
+  | Component | Weight | Method |
+  |---|---|---|
+  | `skills` | 0.30 | Jaccard over a normalized skill taxonomy, blended with embedding similarity for terms outside it |
+  | `overall` | 0.25 | Cosine similarity of mean-pooled resume vs. mean-pooled job description |
+  | `projects` | 0.20 | Per requirement, max cosine over project bullets; mean of the top matches |
+  | `experience` | 0.15 | Same shape over experience bullets, gated by years-of-experience fit |
+  | `role` | 0.10 | Cosine of the job title against the resume's stated/target roles |
+
+  The weighted sum is the match score shown throughout the app; the same
+  per-component `MatchResult.explanation` record also drives job
+  notifications, resume recommendations, and the tailoring change log — one
+  computation, three UI features, always in agreement with each other.
+- **Cached, not re-run**: a stored `MatchResult` is reused whenever neither
+  the resume nor the job has changed since it was scored, and a rescore
+  reuses the embeddings already on disk rather than re-embedding text —
+  embedding is deterministic, so re-computing an unchanged vector would only
+  spend CPU to reproduce the same numbers.
+
+Full internals (chunk types, requirement kinds, the ranking-cache
+invalidation rules) in
+[the architecture doc's Matching Engine section](docs/architecture.md#the-matching-engine).
 
 ## Install
 
