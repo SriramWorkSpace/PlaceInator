@@ -1,7 +1,7 @@
 <h1 align="center">PlaceInator</h1>
 <p align="center">A local-first placement assistant powered by an on-device ML matching engine: semantic resume↔job scoring, LaTeX resume tailoring, and Gmail→Calendar automation</p>
 <h4 align="center">
-    <a href="#setup"><strong>Get started »</strong></a>
+    <a href="#install"><strong>Get started »</strong></a>
     <br />
     <br />
   <a href="docs/architecture.md">Architecture</a>
@@ -116,18 +116,24 @@ invalidation rules) in
 
 ## Install
 
-Prebuilt Windows installers — no Python, Node, or Rust toolchain needed on the
-target machine. Either format works; pick one.
+**Windows, no build tools needed:** grab an installer from
+**[the latest release](https://github.com/SriramWorkSpace/PlaceInator/releases/latest)**
+— double-click either file and follow the prompts. Windows SmartScreen may
+warn about an unrecognized publisher (this isn't code-signed yet); click
+"More info" → "Run anyway" to proceed.
 
-| Installer | Path (after [packaging](#packaging)) | Notes |
-|---|---|---|
-| MSI | `src-tauri/target/release/bundle/msi/PlaceInator_<version>_x64_en-US.msi` | Standard Windows Installer package. Double-click to run, or install silently with `msiexec /i PlaceInator_<version>_x64_en-US.msi /qn`. |
-| NSIS | `src-tauri/target/release/bundle/nsis/PlaceInator_<version>_x64-setup.exe` | Self-contained setup wizard; double-click and follow the prompts. |
+| Installer | Notes |
+|---|---|
+| `PlaceInator_<version>_x64_en-US.msi` | Standard Windows Installer package. Can also install silently: `msiexec /i PlaceInator_<version>_x64_en-US.msi /qn`. |
+| `PlaceInator_<version>_x64-setup.exe` | Self-contained NSIS setup wizard. |
 
 Both install per-user (no admin rights required), add a Start Menu shortcut,
 and register a standard Windows uninstaller. All app data — the SQLite
 database, the cached embedding model, the downloaded Tectonic PDF compiler —
 lives in a per-user AppData folder; nothing is written system-wide.
+
+Building these yourself instead of downloading them: see
+[Packaging](#packaging) below.
 
 ## Documentation
 
